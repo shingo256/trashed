@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Package-Version: 1.0
+;; Version: 1.0
 ;; Package-Requires: ((emacs "24.3"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
