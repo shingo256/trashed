@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.0
+;; Version: 1.1
 ;; Package-Requires: ((emacs "24.3"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -26,9 +26,11 @@
 ;; Viewing/editing system trash can -- open, view, restore or permanently
 ;; delete trashed files or directories in trash can with Dired-like look and
 ;; feel.  The trash can has to be compliant with freedesktop.org spec in
-;; <http://freedesktop.org/wiki/Specifications/trash-spec/>
+;; <https://freedesktop.org/wiki/Specifications/trash-spec/>
 
 ;;; Code:
+
+(require 'tabulated-list)
 
 ;;; Customization variables
 
@@ -37,22 +39,20 @@
   :link '(custom-manual "(emacs)Trashed")
   :group 'files)
 
-(defcustom trashed-show-header t
-  "Non-nil means trash can header with total trash size is shown.
-The header is shown in the first line of Trash Can buffer."
+(defcustom trashed-use-header-line t
+  "Non-nil means Trash Can buffer use a header line."
   :group 'trashed
   :type 'boolean)
 
-(defcustom trashed-show-title-line t
-  "Non-nil means title line of trash file/directory list is shown."
+(defcustom trashed-sort-key (cons "Data & Time" t)
+  "Default sort key.
+If nil, no additional sorting is performed.
+Otherwise, this should be a cons cell (COLUMN . FLIP).
+COLUMN is a string matching one of the column names.
+FLIP, if non-nil, means to invert the resulting sort."
   :group 'trashed
-  :type 'boolean)
-
-(defcustom trashed-sort-ascending nil
-  "Sort files/directories in ascending order when it's t.
-It can be toggled by \\[trashed-toggle-sort-order]."
-  :group 'trashed
-  :type 'boolean)
+  :type '(choice (const :tag "No sorting" nil)
+                 (cons (string) (boolean))))
 
 (defcustom trashed-action-confirmer 'yes-or-no-p
   "Confirmer function to ask if user really wants to execute requested action.
@@ -87,13 +87,6 @@ It can be toggled by \\[trashed-toggle-sort-order]."
   "Faces used by trash mode."
   :group 'trashed
   :group 'faces)
-
-(defface trashed-header
-  '((t (:inherit font-lock-type-face)))
-  "Face used for trash headers."
-  :group 'trashed-faces)
-(defvar trashed-header-face 'trashed-header
-  "Face name used for trash marks.")
 
 (defface trashed-mark
   '((t (:inherit font-lock-constant-face)))
@@ -145,26 +138,14 @@ It can be toggled by \\[trashed-toggle-sort-order]."
   "Trash info directory path.")
 
 (defvar trashed-buffer nil
-  "Trash Can buffer created by \\[trash].")
+  "Trash Can buffer.")
+
+(defvar trashed-buffer-name "Trash Can"
+  "Buffer name string of Trash Can buffer.")
 
 (defvar trashed-mode-map
   (let ((map (make-keymap)))
-    (set-keymap-parent map special-mode-map)
-    (define-key map [mouse-2] 'trashed-mouse-find-file-other-window)
-    (define-key map [double-mouse-1] 'trashed-mouse-browse-url-of-file)
-    (define-key map [follow-link] 'mouse-face)
-    (define-key map "d" 'trashed-flag-delate)
-    (define-key map "D" 'trashed-do-delate)
-    (define-key map "r" 'trashed-flag-restore)
-    (define-key map "R" 'trashed-do-restore)
-    (define-key map "e" 'trashed-browse-url-of-file)
-    (define-key map "W" 'trashed-browse-url-of-file)
-    (define-key map "f" 'trashed-find-file)
-    (define-key map "\C-m" 'trashed-find-file)
-    (define-key map "g" 'revert-buffer)
-    (define-key map "m" 'trashed-mark)
-    (define-key map "M" 'trashed-mark-all)
-    (define-key map "t" 'trashed-toggle-marks)
+    (set-keymap-parent map tabulated-list-mode-map)
     (define-key map " " 'trashed-next-line)
     (define-key map "n" 'trashed-next-line)
     (define-key map "\C-n" 'trashed-next-line)
@@ -173,83 +154,103 @@ It can be toggled by \\[trashed-toggle-sort-order]."
     (define-key map "p" 'trashed-previous-line)
     (define-key map "\C-p" 'trashed-previous-line)
     (define-key map [up] 'trashed-previous-line)
+    (define-key map [tab] 'trashed-forward-column)
+    (define-key map [backtab] 'trashed-backward-column)
+    (define-key map "f" 'trashed-find-file)
+    (define-key map "\C-m" 'trashed-find-file)
     (define-key map "o" 'trashed-find-file-other-window)
+    (define-key map [mouse-2] 'trashed-mouse-find-file-other-window)
     (define-key map "\C-o" 'trashed-display-file)
-    (define-key map "s" 'trashed-toggle-sort-order)
-    (define-key map "u" 'trashed-unmark)
-    (define-key map "U" 'trashed-unmark-all)
     (define-key map "v" 'trashed-view-file)
+    (define-key map "e" 'trashed-browse-url-of-file)
+    (define-key map "W" 'trashed-browse-url-of-file)
+    (define-key map [double-mouse-1] 'trashed-mouse-browse-url-of-file)
+    (define-key map "r" 'trashed-flag-restore)
+    (define-key map "d" 'trashed-flag-delate)
+    (define-key map "m" 'trashed-mark)
+    (define-key map "u" 'trashed-unmark)
+    (define-key map "%r" 'trashed-flag-restore-files-regexp)
+    (define-key map "%d" 'trashed-flag-delete-files-regexp)
+    (define-key map "%m" 'trashed-mark-files-regexp)
+    (define-key map "%u" 'trashed-unmark-files-regexp)
+    (define-key map "R" 'trashed-do-restore)
+    (define-key map "D" 'trashed-do-delate)
+    (define-key map "M" 'trashed-mark-all)
+    (define-key map "U" 'trashed-unmark-all)
+    (define-key map "t" 'trashed-toggle-marks)
     (define-key map "x" 'trashed-do-execute)
     map)
   "Local keymap for trash mode listings.")
 
-(defvar trashed-restore-char ?R
+(defvar trashed-res-char ?R
   "Character used to flag files for restoration.")
 
-(defvar trashed-delete-char ?D
+(defvar trashed-del-char ?D
   "Character used to flag files for deletion.")
 
-(defvar trashed-mark-char ?*
+(defvar trashed-marker-char ?*
   "Character used to mark files for restoration/deletion.")
 
-(defvar trashed-header "Trash Can"
-  "Header string in Trash Can buffer.  Cannot contain `:'.")
-
-(defvar trashed-title-line "M T   Size    Date      Time   File\n- - ------ ---------- -------- -------------------------------------------------\n"
-  "Title line string of trash file/directory list in Trash Can buffer.")
-
-(defvar trashed-file-line-format "  %s %6s %s %s\0%s\n"
-  "Format string of each file/directory line.
-Each %s is type(d/-), size, data & time, original filename and
-trash filename respectively.")
-
-(defvar trashed-file-line-regexp
-  "^\\(.\\) \\(.\\) ...... ....-..-.. ..:..:.. \\([^\0]+\\)\0\\([^\n]+\\)\n"
-  "Regular expression to match up to each file/directory line.
-Each information can be obtained as (match-string n) below.
-
-  1: Mark/flag (*/R/D)
-  2: Type (d/-)
-  3: Original filename
-  4: Trash filename")
+(defvar trashed-regexp-history nil
+  "History list of regular expressions.")
 
 (defvar trashed-default-vpos 0
-  "Line number of the 1st file/directory entry in Trash Can buffer.
-This is set in `trashed-readin' automatically.")
+  "Line number of the 1st file entry in Trash Can buffer.
+This is automatically set in `trashed-readin'.")
 
-(defvar trashed-datetime-hpos-from (+ 2 1 1 6 1)
-  "Horizontal start position of filename in Trash Can buffer.")
+(defvar trashed-column-hpos [0]
+  "Vector of all columns' horizontal positions.
+This is automatically set in `trashed-readin'.")
 
-(defvar trashed-datetime-hpos-to (+ trashed-datetime-hpos-from 10 1 8)
-  "Horizontal end position of filename in Trash Can buffer.")
+(defvar trashed-default-col 3
+  "Default column id to set default hpos.")
 
-(defvar trashed-filename-hpos (+ trashed-datetime-hpos-to 1)
-  "Horizontal position of filename in Trash Can buffer.")
+(defvar trashed-current-col trashed-default-col
+  "Current column id for column forward/backward movement.")
 
 (defvar trashed-font-lock-keywords
-  `(("\\([^:]+\\): " (1 trashed-header-face))
-    (,(concat "^[" (char-to-string trashed-restore-char)
-              (char-to-string trashed-delete-char)
-              (char-to-string trashed-mark-char) "]") . trashed-mark-face)
-    (,(concat "^" (char-to-string trashed-restore-char))
-     (".+" (trashed-set-hpos) nil (0 trashed-restored-face)))
-    (,(concat "^" (char-to-string trashed-delete-char))
-     (".+" (trashed-set-hpos) nil (0 trashed-deleted-face)))
-    (,(concat "^" (char-to-string trashed-mark-char))
-     (".+" (trashed-set-hpos) nil (0 trashed-marked-face)))
-    ("^. d" ".+" (trashed-set-hpos) nil (0 trashed-directory-face))))
+  `((,(concat "^[" (char-to-string trashed-res-char)
+              (char-to-string trashed-del-char)
+              (char-to-string trashed-marker-char) "]")
+     . trashed-mark-face)
+    (,(concat "^" (char-to-string trashed-res-char))
+     (".+" (trashed-reset-hpos) nil (0 trashed-restored-face)))
+    (,(concat "^" (char-to-string trashed-del-char))
+     (".+" (trashed-reset-hpos) nil (0 trashed-deleted-face)))
+    (,(concat "^" (char-to-string trashed-marker-char))
+     (".+" (trashed-reset-hpos) nil (0 trashed-marked-face)))
+    ("^. d" ".+" (trashed-reset-hpos) nil (0 trashed-directory-face)))
+  "Font lock keywords for Trashed mode.")
 
 ;;; Internal functions
 
+(defun trashed-list-print-entry (id cols)
+  "Wrapper for `tabulated-list-print-entry' to make size human readable.
+See the original function for ID and COLS."
+  (tabulated-list-print-entry
+   id (vector (aref cols 0) (file-size-human-readable (string-to-number
+                                                       (aref cols 1)))
+              (aref cols 2) (aref cols 3))))
+
+(defun trashed-size-sorter (f1 f2)
+  "Sorting function for size sorting.
+See PREDICATE description of `sort' for F1 and F2."
+  (> (string-to-number (aref (cadr f1) 1))
+     (string-to-number (aref (cadr f2) 1))))
+
 (defun trashed-read-files ()
-  "Read trash information from trash files and info directories and return it."
+  "Read trash information from trash files and info directories.
+The information is stored in `tabulated-list-entries', where ID is trash file
+name in files directory, and DESC is a vector of file type(-/D), size,
+data & time and original name."
   (let* ((tfa-list (directory-files-and-attributes trashed-files-dir nil nil t))
-         infostr tf if fa fn fd fm fs fl file-list)
+         infostr tf if fa fd ft fs fn)
+    (setq tabulated-list-entries nil)
     (while tfa-list
       (setq tf (caar tfa-list)
             fa (cdar tfa-list)
-            fm (substring (nth 8 fa) 0 1)
-            fs (file-size-human-readable (nth 7 fa)))
+            ft (substring (nth 8 fa) 0 1)
+            fs (number-to-string (nth 7 fa)))
       (when (null (or (equal tf ".") (equal tf "..")))
         (setq if (expand-file-name (concat tf ".trashinfo") trashed-info-dir))
         (if (or (file-exists-p if)
@@ -264,52 +265,22 @@ This is set in `trashed-readin' automatically.")
               (if (string-match "\nPath=\\(.+\\)\nDeletionDate=\\(.+\\)\n"
                                 infostr)
                   (progn
-                    (setq fn (match-string 1 infostr)
-                          fd (match-string 2 infostr))
-                    (setq fn (decode-coding-string (url-unhex-string fn) 'utf-8)
-                          fd (replace-regexp-in-string "T" " " fd)
-                          fl (format trashed-file-line-format fm fs fd fn tf))
-                    (add-text-properties
-                     trashed-filename-hpos
-                     (+ trashed-filename-hpos (length fn))
-                     '(mouse-face highlight
-                       help-echo "mouse-2: visit this file in other window")
-                     fl)
-                    ;; Hide trash file name
-                    (put-text-property
-                     (+ trashed-filename-hpos (length fn))
-                     (+ trashed-filename-hpos (length fn) 1 (length tf))
-                     'invisible t fl)
-                    (setq file-list (cons fl file-list)))
+                    (setq fd (match-string 2 infostr))
+                    (aset fd 10 ? ) ;; remove "T"
+                    (setq fn (propertize (decode-coding-string
+                                          (url-unhex-string
+                                           (match-string 1 infostr))
+                                          'utf-8)
+                                         'mouse-face 'highlight)
+                          tabulated-list-entries (cons (list
+                                                        tf (vector ft fs fd fn))
+                                                       tabulated-list-entries)))
                 (message "Skipping %s: wrong info file format." tf)))
           (message "Skipping %s: info file not found." tf)))
-      (setq tfa-list (cdr tfa-list)))
-    file-list))
-
-(defun trashed-sort-files (file-list)
-  "Return the sorted FILE-LIST.
-Sorting is done by date and time when each file is trashed."
-  (sort file-list
-        (lambda (f1 f2)
-          (let* ((d1 (substring
-                      f1 trashed-datetime-hpos-from trashed-datetime-hpos-to))
-                 (d2 (substring
-                      f2 trashed-datetime-hpos-from trashed-datetime-hpos-to))
-                 (len (length d1))
-                 (pos 0)
-                 c1 c2 result)
-            (while (< pos len)
-              (setq c1 (aref d1 pos)
-                    c2 (aref d2 pos)
-                    pos (cond ((if trashed-sort-ascending (< c1 c2) (> c1 c2))
-                               (setq result t) len)
-                              ((if trashed-sort-ascending (> c1 c2) (< c1 c2))
-                               len)
-                              (t (1+ pos)))))
-            result))))
+      (setq tfa-list (cdr tfa-list)))))
 
 (defun trashed-get-trash-size ()
-  "Issue du shell command to get Trash directory size."
+  "Issue du shell command to get total Trash Can size."
   (let* ((buffer (generate-new-buffer "*Async Shell Command*"))
          (process (start-process "trash" buffer shell-file-name
                                  shell-command-switch
@@ -319,7 +290,7 @@ Sorting is done by date and time when each file is trashed."
       (kill-buffer buffer))))
 
 (defun trashed-get-trash-size-sentinel (process event)
-  "Get Trash directory size and update Trash Can buffer when du completed.
+  "Get total Trash Can size and display it in buffer name when du completed.
 PROCESS is the process which ran du command started by `trashed-get-trash-size'.
 EVENT is ignored."
   (let* ((pbuf (process-buffer process))
@@ -331,107 +302,59 @@ EVENT is ignored."
     (kill-buffer pbuf)
     (if (and size (buffer-live-p trashed-buffer))
         (with-current-buffer trashed-buffer
-          (save-excursion
-            (let ((inhibit-read-only t))
-              (goto-char (point-min))
-              (when (and (re-search-forward ":" nil t)
-                         (eq (line-number-at-pos) 1))
-                (delete-region (point) (progn (end-of-line) (point)))
-                (insert (concat " " size "B")))))
-          (set-buffer-modified-p nil)))))
-
-(defsubst trashed-file-line-p ()
-  "Return t if point is on a file/directory entry line."
-  (let ((vpos (line-number-at-pos)))
-    (and (>= vpos trashed-default-vpos) (null (eobp)))))
+          (rename-buffer (format "%s (%sB)" trashed-buffer-name size))))))
 
 (defun trashed-set-vpos ()
   "Set vertical cursor position to `trashed-default-vpos'."
   (goto-char (point-min))
   (forward-line (1- trashed-default-vpos)))
 
-(defun trashed-set-hpos ()
-  "Set horizontal cursor position to `trashed-filename-hpos'."
+(defun trashed-set-hpos (col)
+  "Set horizontal cursor position to column COL."
+  (setq trashed-current-col col)
   (beginning-of-line)
-  (if (trashed-file-line-p)
-      (forward-char trashed-filename-hpos)))
+  (if (tabulated-list-get-id)
+      (forward-char (aref trashed-column-hpos col))))
+
+(defun trashed-reset-hpos ()
+  "Set horizontal cursor position to default column."
+  (trashed-set-hpos trashed-default-col))
 
 (defun trashed-readin ()
   "Read, sort and insert trash information to current buffer."
   (run-hooks 'trashed-before-readin-hook)
   (message "Reading trash files...")
-  (if trashed-show-header
-      (progn (insert (concat trashed-header ": checking...\n\n"))
-             (trashed-get-trash-size)))
-  (let ((file-list (trashed-sort-files (trashed-read-files))))
-    (if trashed-show-title-line (insert trashed-title-line))
-    (setq trashed-default-vpos (line-number-at-pos))
-    (while file-list
-      (insert (car file-list))
-      (setq file-list (cdr file-list)))
-    (set-buffer-modified-p nil))
+  (trashed-get-trash-size)
+  (trashed-read-files)
   (message "Reading trash files...done")
-  (run-hooks 'trashed-after-readin-hook))
+  (run-hooks 'trashed-after-readin-hook)
+  (setq tabulated-list-use-header-line trashed-use-header-line
+        trashed-default-vpos (if trashed-use-header-line 1 2)
+        trashed-column-hpos
+        (let ((cur tabulated-list-padding))
+          (vconcat (mapcar (lambda (format)
+                             (if (plist-get (nthcdr 3 format) :right-align)
+                                 (progn (setq cur (+ cur (cadr format) 1))
+                                        (- cur 2))
+                               (prog1 cur
+                                 (setq cur (+ cur (cadr format) 1)))))
+                           tabulated-list-format))))
+  (tabulated-list-init-header))
 
-(put 'dired-mode 'mode-class 'special)
+(defun trashed-open-file (func)
+  "Open file at point with function FUNC."
+  (let ((trash-file-name (tabulated-list-get-id)))
+    (if trash-file-name
+        (apply func (list (expand-file-name trash-file-name trashed-files-dir)))
+      (error "No file on this line"))))
 
-(defun trashed-mode ()
-  "Major mode for viewing/editing system trash can.
-Open, view, restore or permanently delete trashed files or directories
-in trash can with Dired-like look and feel.
-
-Customization variables:
-
-  `trashed-show-header'
-  `trashed-show-title-line'
-  `trashed-sort-ascending'
-  `trashed-action-confirmer'
-
-Hooks:
-
-  `trashed-before-readin-hook'
-  `trashed-after-readin-hook'
-  `trashed-mode-hook'
-  `trashed-load-hook'
-
-Keybindings:
-
-\\{trashed-mode-map}"
-  (kill-all-local-variables)
-  (use-local-map trashed-mode-map)
-  (setq major-mode 'trashed-mode
-        mode-name "Trashed"
-        font-lock-defaults '(trashed-font-lock-keywords t))
-  (font-lock-mode t)
-  (setq-local revert-buffer-function #'trashed-revert)
-  (setq truncate-lines t)
-  (run-mode-hooks 'trashed-mode-hook))
-
-(defun trashed-get-trash-file-name ()
-  "Return the real filename of the file/directory entry at point."
-  (save-excursion
-    (beginning-of-line)
-    (and (re-search-forward trashed-file-line-regexp nil t)
-         (expand-file-name (match-string-no-properties 4) trashed-files-dir))))
-
-(defun trashed-flag (flag)
-  "Flag the current line's file with FLAG."
-  (let ((inhibit-read-only t))
-    (when (trashed-file-line-p)
-      (beginning-of-line)
-      (insert flag)
-      (delete-char 1)
-      (forward-line)
-      (trashed-set-hpos))
-    (set-buffer-modified-p nil)))
-
-(defun trashed-num-marked-files (flag)
-  "Return the number of marked files/directories with FLAG."
+(defun trashed-num-tagged-files (tag)
+  "Return the number of tagged files with TAG."
   (let ((ret 0))
     (save-excursion
       (trashed-set-vpos)
-      (while (trashed-file-line-p)
-        (if (eq (char-after) flag) (setq ret (1+ ret)))
+      (while (tabulated-list-get-id)
+        (if (eq (char-after) tag) (setq ret (1+ ret)))
         (forward-line)))
     ret))
 
@@ -457,70 +380,135 @@ or it was cancelled by user."
            t)
        (error "%s" (error-message-string err))))))
 
+(defun trashed-tag-files-regexp (prompt tag)
+  "TAG all files matching regular expression with prompt beginning with PROMPT."
+  (let ((regexp (read-regexp
+                 (concat prompt " files (regexp): ")
+                 ;; Add more suggestions into the default list
+                 (cons nil
+                       (and (tabulated-list-get-id)
+                            (list (aref (tabulated-list-get-entry) 3)
+                                  (concat
+                                   (regexp-quote
+                                    (file-name-extension
+                                     (aref (tabulated-list-get-entry) 3) t))
+                                   "\\'"))))
+                 'trashed-regexp-history))
+        (n 0))
+    (save-excursion
+      (trashed-set-vpos)
+      (while (tabulated-list-get-id)
+        (when (string-match regexp (aref (tabulated-list-get-entry) 3))
+          (tabulated-list-put-tag (char-to-string tag))
+          (setq n (1+ n)))
+        (forward-line)))
+    (message "%d matching files." n)))
+
 (defun trashed-do-action (action)
   "Restore/delete all marked files when ACTION is restore/delete."
-  (let ((n (trashed-num-marked-files trashed-mark-char))
+  (let ((n (trashed-num-tagged-files trashed-marker-char))
+        (trash-file-name (tabulated-list-get-id))
         c marked-file)
     (if (= n 0)
-        (if (trashed-file-line-p)
+        (if trash-file-name
             (progn (save-excursion
                      (setq c (progn (beginning-of-line) (char-after)))
-                     (trashed-flag trashed-mark-char))
+                     (tabulated-list-put-tag (char-to-string
+                                              trashed-marker-char)))
                    (setq n 1
-                         marked-file (trashed-get-trash-file-name)))
+                         marked-file (expand-file-name trash-file-name
+                                                       trashed-files-dir)))
           (error "No file on this line")))
     (unwind-protect
         (if (and (> n 0) (apply trashed-action-confirmer
                                 (list (format "%s %c [%d item(s)] "
                                               (capitalize (symbol-name action))
-                                              trashed-mark-char n))))
+                                              trashed-marker-char n))))
             (trashed-do-execute-internal action))
       (and marked-file (file-exists-p marked-file)
-           (save-excursion (trashed-flag c))))))
+           (save-excursion (tabulated-list-put-tag (char-to-string c)))))))
 
 (defun trashed-do-execute-internal (mark-action)
   "Internal function to actually restore/delete files.
-Restiration/deletion is done acording to MARK-ACTION and each flag/mark status.
+Restiration/deletion is done acording to MARK-ACTION and each tag status.
 When MARK-ACTION is:
 
   nil     -- restore/delete files with flag R/D.
   restore -- restore files with mark *.
   delete  -- delete files with mark *."
   (let ((delete-by-moving-to-trash nil)
-        (inhibit-read-only t)
-        m)
+        trash-file-name m entry)
     (save-excursion
       (trashed-set-vpos)
-      (while (re-search-forward trashed-file-line-regexp nil t)
-        (setq m (string-to-char (match-string-no-properties 1)))
-        (when (null
-               (cond
-                ((or (and (null mark-action) (eq m trashed-restore-char))
-                     (and (eq mark-action 'restore) (eq m trashed-mark-char)))
-                 (trashed-restore-file
-                  (expand-file-name (match-string-no-properties 4)
-                                    trashed-files-dir)
-                  (expand-file-name (match-string-no-properties 3))))
-                ((or (and (null mark-action) (eq m trashed-delete-char))
-                     (and (eq mark-action 'delete) (eq m trashed-mark-char)))
-                 (if (equal (match-string-no-properties 2) "d")
-                     (delete-directory (expand-file-name
-                                        (match-string-no-properties 4)
-                                        trashed-files-dir)
-                                       t)
-                   (delete-file (expand-file-name
-                                 (match-string-no-properties 4)
-                                 trashed-files-dir))))
-                (t)))
-          (delete-file (expand-file-name
-                        (concat (match-string-no-properties 4)
-                                ".trashinfo")
-                        trashed-info-dir))
-          (delete-region (match-beginning 0) (match-end 0))))
-      (if trashed-show-header (trashed-get-trash-size)))
-    (set-buffer-modified-p nil)))
+      (while (setq trash-file-name (tabulated-list-get-id))
+        (setq m (char-after)
+              entry (tabulated-list-get-entry))
+        (if (null
+             (cond
+              ((or (and (null mark-action) (eq m trashed-res-char))
+                   (and (eq mark-action 'restore) (eq m trashed-marker-char)))
+               (trashed-restore-file
+                (expand-file-name trash-file-name trashed-files-dir)
+                (expand-file-name (aref entry 3))))
+              ((or (and (null mark-action) (eq m trashed-del-char))
+                   (and (eq mark-action 'delete) (eq m trashed-marker-char)))
+               (if (equal (aref entry 0) "d")
+                   (delete-directory (expand-file-name trash-file-name
+                                                       trashed-files-dir)
+                                     t)
+                 (delete-file (expand-file-name trash-file-name
+                                                trashed-files-dir))))
+              (t)))
+            (progn
+              (delete-file (expand-file-name (concat trash-file-name
+                                                     ".trashinfo")
+                                             trashed-info-dir))
+              (tabulated-list-delete-entry)
+              ;; Delete from `tabulated-list-entries'
+              (if (equal (caar tabulated-list-entries) trash-file-name)
+                  (setq tabulated-list-entries (cdr tabulated-list-entries))
+                (let ((tail tabulated-list-entries) tail-cdr)
+                  (while (setq tail-cdr (cdr tail))
+                    (setq tail (if (equal (caar tail-cdr) trash-file-name)
+                                   (progn (setcdr tail (cdr tail-cdr)) nil)
+                                 tail-cdr))))))
+          (forward-line)))
+      (trashed-get-trash-size))))
 
 ;;; User commands
+
+(define-derived-mode trashed-mode tabulated-list-mode "Trashed"
+  "Major mode for viewing/editing system trash can.
+Open, view, restore or permanently delete trashed files or directories
+in trash can with Dired-like look and feel.
+
+Customization variables:
+
+  `trashed-use-header-line'
+  `trashed-sort-key'
+  `trashed-action-confirmer'
+
+Hooks:
+
+  `trashed-before-readin-hook'
+  `trashed-after-readin-hook'
+  `trashed-mode-hook'
+  `trashed-load-hook'
+
+Keybindings:
+
+\\{trashed-mode-map}"
+  (setq tabulated-list-format [("T"                 1 t)
+			       ("Size"              7
+                                trashed-size-sorter :right-align t)
+			       ("Data & Time"      19 t :right-align t)
+			       ("File"             47 t)]
+        tabulated-list-sort-key trashed-sort-key
+        tabulated-list-printer 'trashed-list-print-entry
+        tabulated-list-padding 2
+        font-lock-defaults '(trashed-font-lock-keywords t))
+  (add-hook 'tabulated-list-revert-hook 'trashed-readin nil t)
+  (font-lock-mode t))
 
 ;;;###autoload
 (defun trashed ()
@@ -529,173 +517,175 @@ Open, view, restore or permanently delete trashed files or directories
 in trash can with Dired-like look and feel.  The trash can has to be
 compliant with freedesktop.org specification in
 
-https://freedesktop.org/wiki/Specifications/trash-spec/"
+<https://freedesktop.org/wiki/Specifications/trash-spec/>"
   (interactive)
-  (if (or (null trashed-buffer) (null (buffer-live-p trashed-buffer)))
+  (if (null (buffer-live-p trashed-buffer))
       (progn
-        (pop-to-buffer (setq trashed-buffer (get-buffer-create "Trash Can")))
-        (setq buffer-undo-list t)
-        (trashed-readin)
+        (pop-to-buffer
+         (setq trashed-buffer (get-buffer-create trashed-buffer-name)))
         (trashed-mode)
-        (setq buffer-read-only t)
+        (revert-buffer)
         (trashed-set-vpos)
-        (trashed-set-hpos))
+        (trashed-reset-hpos))
     (pop-to-buffer trashed-buffer)))
 
 (defun trashed-previous-line ()
-  "Move up one line then position at filename."
+  "Move up one line then position at File column."
   (interactive)
   (forward-line -1)
-  (trashed-set-hpos))
+  (trashed-reset-hpos))
 
 (defun trashed-next-line ()
-  "Move down one line then position at filename."
+  "Move down one line then position at File column."
   (interactive)
   (forward-line 1)
-  (trashed-set-hpos))
+  (trashed-reset-hpos))
+
+(defun trashed-forward-column ()
+  "Move point to the forward column position."
+  (interactive)
+  (trashed-set-hpos (mod (1+ trashed-current-col)
+                         (length tabulated-list-format))))
+
+(defun trashed-backward-column ()
+  "Move point to the backward column position."
+  (interactive)
+  (trashed-set-hpos (mod (1- trashed-current-col)
+                         (length tabulated-list-format))))
 
 (defun trashed-find-file ()
-  "Visit the file/directory on this line."
+  "Visit the file on this line."
   (interactive)
-  (if (trashed-file-line-p)
-      (find-file (trashed-get-trash-file-name))
-    (error "No file on this line")))
+  (trashed-open-file 'find-file))
 
 (defun trashed-find-file-other-window ()
-  "Visit the file/directory on this line in another window.
-EVENT is the mouse click event."
+  "Visit the file on this line in another window."
   (interactive)
-  (if (trashed-file-line-p)
-      (find-file-other-window (trashed-get-trash-file-name))
-    (error "No file on this line")))
+  (trashed-open-file 'find-file-other-window))
 
 (defun trashed-mouse-find-file-other-window (event)
-  "Visit the file/directory you click on in another window.
+  "Visit the file you click on in another window.
 EVENT is the mouse click event."
   (interactive "e")
   (with-current-buffer (window-buffer (posn-window (event-end event)))
     (goto-char (posn-point (event-end event)))
-    (if (trashed-file-line-p)
-        (find-file-other-window (trashed-get-trash-file-name))
-      (error "No file on this line"))))
+    (trashed-open-file 'find-file-other-window)))
+
+(defun trashed-browse-url-of-file ()
+  "Ask a default browser to display the file on this line."
+  (interactive)
+  (trashed-open-file 'browse-url-of-file))
 
 (defun trashed-mouse-browse-url-of-file (event)
-  "Ask a default browser to display the file/directory you click on.
+  "Ask a default browser to display the file you click on.
 EVENT is the mouse click event."
   (interactive "e")
   (with-current-buffer (window-buffer (posn-window (event-end event)))
     (goto-char (posn-point (event-end event)))
-    (if (trashed-file-line-p)
-        (browse-url-of-file (trashed-get-trash-file-name))
-      (error "No file on this line"))))
+    (trashed-open-file 'browse-url-of-file)))
 
 (defun trashed-display-file ()
-  "Display the file/directory on this line in another window."
+  "Display the file on this line in another window."
   (interactive)
-  (if (trashed-file-line-p)
-      (display-buffer (find-file-noselect (trashed-get-trash-file-name)) t)
-    (error "No file on this line")))
+  (trashed-open-file (lambda (f) (display-buffer (find-file-noselect f) t))))
 
 (defun trashed-view-file ()
   "Examine a file in view mode, returning when done."
   (interactive)
-  (if (trashed-file-line-p)
-      (view-file (trashed-get-trash-file-name))
-    (error "No file on this line")))
-
-(defun trashed-browse-url-of-file ()
-  "Ask a default browser to display the file/directory on this line."
-  (interactive)
-  (if (trashed-file-line-p)
-      (browse-url-of-file (trashed-get-trash-file-name))
-    (error "No file on this line")))
+  (trashed-open-file 'view-file))
 
 (defun trashed-flag-restore ()
-  "Flag the current line's file/directory for restoration."
+  "Flag the current line's file for restoration."
   (interactive)
-  (trashed-flag trashed-restore-char))
+  (tabulated-list-put-tag (char-to-string trashed-res-char) t)
+  (trashed-reset-hpos))
 
 (defun trashed-flag-delate ()
-  "Flag the current line's file/directory for deletion."
+  "Flag the current line's file for deletion."
   (interactive)
-  (trashed-flag trashed-delete-char))
+  (tabulated-list-put-tag (char-to-string trashed-del-char) t)
+  (trashed-reset-hpos))
 
 (defun trashed-mark ()
-  "Mark the current line's file/directory for restoration/deletion."
+  "Mark the current line's file for use in later commands."
   (interactive)
-  (trashed-flag trashed-mark-char))
-
-(defun trashed-mark-all ()
-  "Mark all files/directories."
-  (interactive)
-  (save-excursion
-    (trashed-set-vpos)
-    (while (trashed-file-line-p)
-      (trashed-flag trashed-mark-char))))
+  (tabulated-list-put-tag (char-to-string trashed-marker-char) t)
+  (trashed-reset-hpos))
 
 (defun trashed-unmark ()
-  "Unmark the current line's file/directory."
+  "Unmark the current line's file."
   (interactive)
-  (trashed-flag ? ))
+  (tabulated-list-put-tag (char-to-string ? ) t)
+  (trashed-reset-hpos))
 
-(defun trashed-unmark-all ()
-  "Unmark all files/directories."
+(defun trashed-mark-all ()
+  "Mark all files for use in later commands."
   (interactive)
   (save-excursion
     (trashed-set-vpos)
-    (while (trashed-file-line-p)
-      (trashed-unmark))))
+    (while (tabulated-list-get-id)
+      (tabulated-list-put-tag (char-to-string trashed-marker-char) t))))
 
-(defun trashed-toggle-sort-order ()
-  "Toggle sort order of files/directories in Trash Can buffer.
-The default order is from the most recent to the least recent
-when each file/directory is trashed."
+(defun trashed-unmark-all ()
+  "Unmark all files."
   (interactive)
-  (setq trashed-sort-ascending (null trashed-sort-ascending))
-  (revert-buffer))
+  (save-excursion
+    (trashed-set-vpos)
+    (while (tabulated-list-get-id)
+      (tabulated-list-put-tag (char-to-string ? ) t))))
 
 (defun trashed-toggle-marks ()
-  "Toggle mark status: marked files/directories become unmarked, and vice versa.
-Files/directories marked with other flags (such as ‘D’) are not affected."
+  "Toggle mark status: marked files become unmarked, and vice versa.
+Files marked with other flags (such as ‘D’) are not affected."
   (interactive)
   (save-excursion
     (let (c)
       (trashed-set-vpos)
-      (while (trashed-file-line-p)
+      (while (tabulated-list-get-id)
         (setq c (char-after))
-        (cond ((eq c ? ) (trashed-flag trashed-mark-char) (beginning-of-line))
-              ((eq c trashed-mark-char) (trashed-flag ? ) (beginning-of-line))
+        (cond ((eq c ? )
+               (tabulated-list-put-tag (char-to-string trashed-marker-char) t))
+              ((eq c trashed-marker-char)
+               (tabulated-list-put-tag (char-to-string ? ) t))
               (t (forward-line)))))))
 
-(defun trashed-revert (&optional _arg _noconfirm)
-  "Reread the Trash Can buffer."
+(defun trashed-flag-restore-files-regexp ()
+  "Flag all files matching regular expression for restoration."
   (interactive)
-  (let ((x (- (point) (progn (beginning-of-line) (point))))
-        (y (line-number-at-pos))
-        (inhibit-read-only t))
-    (erase-buffer)
-    (trashed-readin)
-    (goto-char (point-min))
-    (forward-line (1- y))
-    (forward-char x)))
+  (trashed-tag-files-regexp "Restore" trashed-res-char))
+
+(defun trashed-flag-delete-files-regexp ()
+  "Flag all files matching regular expression for deletion."
+  (interactive)
+  (trashed-tag-files-regexp "Delete" trashed-del-char))
+
+(defun trashed-mark-files-regexp ()
+  "Mark all files matching regular expression for use in later commands."
+  (interactive)
+  (trashed-tag-files-regexp "Mark" trashed-marker-char))
+
+(defun trashed-unmark-files-regexp ()
+  "Unmark all files matching regular expression."
+  (interactive)
+  (trashed-tag-files-regexp "Unmark" ? ))
 
 (defun trashed-do-restore ()
-  "Restore all marked files/directories.
-If no file is marked, restore file/directory at point."
+  "Restore all marked files.
+If no file is marked, restore the file at point."
   (interactive)
   (trashed-do-action 'restore))
 
 (defun trashed-do-delate ()
-  "Delete all marked files/directories.
-If no file is marked, delete file/directory at point."
+  "Delete all marked files.
+If no file is marked, delete the file at point."
   (interactive)
   (trashed-do-action 'delete))
 
 (defun trashed-do-execute ()
-  "Restore/delete all files/directories flagged for restoration/deletion."
+  "Restore/delete all files flagged for restoration/deletion."
   (interactive)
-  (let ((nr (trashed-num-marked-files trashed-restore-char))
-        (nd (trashed-num-marked-files trashed-delete-char)))
+  (let ((nr (trashed-num-tagged-files trashed-res-char))
+        (nd (trashed-num-tagged-files trashed-del-char)))
     (if (> (+ nr nd) 0)
         (if (apply trashed-action-confirmer
                    (list (format "%s%s%s [%d item(s)] "
