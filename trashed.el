@@ -243,7 +243,9 @@ See PREDICATE description of `sort' for F1 and F2."
 The information is stored in `tabulated-list-entries', where ID is trash file
 name in files directory, and DESC is a vector of file type(-/D), size,
 data & time and original name."
-  (let* ((tfa-list (directory-files-and-attributes trashed-files-dir nil nil t))
+  (let* ((tfa-list (ignore-errors
+                     (directory-files-and-attributes
+                      trashed-files-dir nil nil t)))
          infostr tf if fa fd ft fs fn)
     (setq tabulated-list-entries nil)
     (while tfa-list
