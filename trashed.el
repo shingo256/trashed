@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.1
+;; Version: 1.2
 ;; Package-Requires: ((emacs "24.3"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -44,7 +44,7 @@
   :group 'trashed
   :type 'boolean)
 
-(defcustom trashed-sort-key (cons "Data & Time" t)
+(defcustom trashed-sort-key (cons "Deleted at" t)
   "Default sort key.
 If nil, no additional sorting is performed.
 Otherwise, this should be a cons cell (COLUMN . FLIP).
@@ -262,8 +262,8 @@ data & time and original name."
                     (with-temp-buffer
                       (insert-file-contents if)
                       (buffer-substring-no-properties (point-min) (point-max))))
-              (if (string-match "\nPath=\\(.+\\)\nDeletionDate=\\(.+\\)\n"
-                                infostr)
+              (if (string-match
+                   "\nPath *= *\\(.+\\)\nDeletionDate *= *\\(.+\\)\n" infostr)
                   (progn
                     (setq fd (match-string 2 infostr))
                     (aset fd 10 ? ) ;; remove "T"
@@ -498,11 +498,11 @@ Hooks:
 Keybindings:
 
 \\{trashed-mode-map}"
-  (setq tabulated-list-format [("T"                 1 t)
-			       ("Size"              7
-                                trashed-size-sorter :right-align t)
-			       ("Data & Time"      19 t :right-align t)
-			       ("File"             47 t)]
+  (setq tabulated-list-format [("T"           1 t)
+			       ("Size"        7 trashed-size-sorter
+                                                  :right-align t)
+			       ("Deleted at" 19 t :right-align t)
+			       ("File"       47 t)]
         tabulated-list-sort-key trashed-sort-key
         tabulated-list-printer 'trashed-list-print-entry
         tabulated-list-padding 2
