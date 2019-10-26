@@ -3,8 +3,8 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.2
-;; Package-Requires: ((emacs "24.3"))
+;; Version: 1.3
+;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
 
@@ -31,6 +31,7 @@
 ;;; Code:
 
 (require 'tabulated-list)
+(require 'parse-time)
 
 ;;; Customization variables
 
@@ -44,7 +45,7 @@
   :group 'trashed
   :type 'boolean)
 
-(defcustom trashed-sort-key (cons "Deleted at" t)
+(defcustom trashed-sort-key (cons "Deletion Time" t)
   "Default sort key.
 If nil, no additional sorting is performed.
 Otherwise, this should be a cons cell (COLUMN . FLIP).
@@ -53,6 +54,22 @@ FLIP, if non-nil, means to invert the resulting sort."
   :group 'trashed
   :type '(choice (const :tag "No sorting" nil)
                  (cons (string) (boolean))))
+
+(defcustom trashed-file-size-format 'human-readable
+  "Trash file size format displayed in the list.
+`plain' means a plain number, `human-readable' means a human readable number
+formatted with `file-size-human-readable', `with-comma' means a number
+with comma every 3 digits."
+  :group 'trashed
+  :type '(choice (const plain)
+                 (const human-readable)
+                 (const with-comma)))
+
+(defcustom trashed-deletion-time-format "%Y-%m-%d %T"
+  "Deletion time format displayed in the list.
+Formatting is done with `format-time-string'.  See the function for details."
+  :group 'trashed
+  :type 'string)
 
 (defcustom trashed-action-confirmer 'yes-or-no-p
   "Confirmer function to ask if user really wants to execute requested action.
@@ -84,7 +101,7 @@ FLIP, if non-nil, means to invert the resulting sort."
 ;;; Faces
 
 (defgroup trashed-faces nil
-  "Faces used by trash mode."
+  "Faces used by Trashed mode."
   :group 'trashed
   :group 'faces)
 
@@ -180,7 +197,7 @@ FLIP, if non-nil, means to invert the resulting sort."
     (define-key map "t" 'trashed-toggle-marks)
     (define-key map "x" 'trashed-do-execute)
     map)
-  "Local keymap for trash mode listings.")
+  "Local keymap for Trashed mode listings.")
 
 (defvar trashed-res-char ?R
   "Character used to flag files for restoration.")
@@ -224,13 +241,38 @@ This is automatically set in `trashed-readin'.")
 
 ;;; Internal functions
 
+(defun trashed-format-size-string (sizestr)
+  "Format file string SIZESTR based on `trashed-file-size-format'."
+  (cond ((eq trashed-file-size-format 'plain)
+         sizestr)
+        ((eq trashed-file-size-format 'human-readable)
+         (file-size-human-readable (string-to-number sizestr)))
+        ((eq trashed-file-size-format 'with-comma)
+         (let ((size (string-to-number sizestr)) quo rem ret)
+           (while (> size 0)
+             (setq quo (/ size 1000)
+                   rem (% size 1000)
+                   ret (concat (format (if (>= size 1000) "%03d" "%d") rem)
+                               (if ret "," "") ret)
+                   size quo))
+           (or ret "0")))
+        (t sizestr)))
+
+(defun trashed-format-time-string (timestr)
+  "Format time string TIMESTR based on `trashed-time-format'."
+  (string-match "\\([0-9]+\\) \\([0-9]+\\)" timestr)
+  (format-time-string trashed-deletion-time-format
+                      (list (string-to-number (match-string 1 timestr))
+                            (string-to-number (match-string 2 timestr)))))
+
 (defun trashed-list-print-entry (id cols)
-  "Wrapper for `tabulated-list-print-entry' to make size human readable.
+  "Wrapper for `tabulated-list-print-entry' to format trash file size and time.
 See the original function for ID and COLS."
   (tabulated-list-print-entry
-   id (vector (aref cols 0) (file-size-human-readable (string-to-number
-                                                       (aref cols 1)))
-              (aref cols 2) (aref cols 3))))
+   id (vector (aref cols 0)
+              (trashed-format-size-string (aref cols 1))
+              (trashed-format-time-string (aref cols 2))
+              (aref cols 3))))
 
 (defun trashed-size-sorter (f1 f2)
   "Sorting function for size sorting.
@@ -243,42 +285,70 @@ See PREDICATE description of `sort' for F1 and F2."
 The information is stored in `tabulated-list-entries', where ID is trash file
 name in files directory, and DESC is a vector of file type(-/D), size,
 data & time and original name."
-  (let* ((tfa-list (ignore-errors
-                     (directory-files-and-attributes
-                      trashed-files-dir nil nil t)))
-         infostr tf if fa fd ft fs fn)
+  (let* ((tfa-list (ignore-errors (directory-files-and-attributes
+                                   trashed-files-dir nil nil t)))
+         tfile fattr ifile infostr fd ft fs fn
+         size-name time-name file-name size-width time-width file-width
+         cur-size-width cur-time-width cur-file-width)
     (setq tabulated-list-entries nil)
+    ;; Initialize column width
+    (setq size-name (car (aref tabulated-list-format 1))
+          time-name (car (aref tabulated-list-format 2))
+          file-name (car (aref tabulated-list-format 3))
+          size-width (cdr (aref tabulated-list-format 1))
+          time-width (cdr (aref tabulated-list-format 2))
+          file-width (cdr (aref tabulated-list-format 3)))
+    ;; 3 = 1 blank + sorting arrow which could be width 2
+    (setcar size-width (+ (string-width size-name) 3))
+    (setcar time-width (+ (string-width time-name) 3))
+    (setcar file-width (+ (string-width file-name) 3))
+    ;; Start parsing
     (while tfa-list
-      (setq tf (caar tfa-list)
-            fa (cdar tfa-list)
-            ft (substring (nth 8 fa) 0 1)
-            fs (number-to-string (nth 7 fa)))
-      (when (null (or (equal tf ".") (equal tf "..")))
-        (setq if (expand-file-name (concat tf ".trashinfo") trashed-info-dir))
-        (if (or (file-exists-p if)
-                ;; Workaround for Emacs bug in move-file-to-trash
-                (file-exists-p (setq if
-                                     (expand-file-name tf trashed-info-dir))))
+      (setq tfile (caar tfa-list)
+            fattr (cdar tfa-list)
+            ft (substring (nth 8 fattr) 0 1) ;; type
+            fs (number-to-string (nth 7 fattr))) ;; size
+      (when (null (or (equal tfile ".") (equal tfile "..")))
+        (setq ifile (expand-file-name (concat tfile ".trashinfo")
+                                      trashed-info-dir))
+        (if (or (file-exists-p ifile)
+                ;; Workaround for Emacs bug #37922
+                (file-exists-p (setq ifile (expand-file-name
+                                            tfile trashed-info-dir))))
             (progn
               (setq infostr
                     (with-temp-buffer
-                      (insert-file-contents if)
+                      (insert-file-contents ifile)
                       (buffer-substring-no-properties (point-min) (point-max))))
               (if (string-match
                    "\nPath *= *\\(.+\\)\nDeletionDate *= *\\(.+\\)\n" infostr)
                   (progn
-                    (setq fd (match-string 2 infostr))
-                    (aset fd 10 ? ) ;; remove "T"
-                    (setq fn (propertize (decode-coding-string
-                                          (url-unhex-string
-                                           (match-string 1 infostr))
+                    (setq fd (match-string 2 infostr)
+                          fn (match-string 1 infostr))
+                    (setq fd (parse-iso8601-time-string fd)
+                          ;; column descriptor must be a string
+                          fd (format "%07d %05d" (car fd) (cadr fd))
+                          fn (propertize (decode-coding-string
+                                          (url-unhex-string fn)
                                           'utf-8)
-                                         'mouse-face 'highlight)
-                          tabulated-list-entries (cons (list
-                                                        tf (vector ft fs fd fn))
-                                                       tabulated-list-entries)))
-                (message "Skipping %s: wrong info file format." tf)))
-          (message "Skipping %s: info file not found." tf)))
+                                         'mouse-face 'highlight))
+                    (setq tabulated-list-entries
+                          (cons (list tfile (vector ft fs fd fn))
+                                tabulated-list-entries))
+                    ;; Lengthen column width if needed
+                    (setq cur-size-width (string-width
+                                          (trashed-format-size-string fs))
+                          cur-time-width (string-width
+                                          (trashed-format-time-string fd))
+                          cur-file-width (string-width fn))
+                    (if (> cur-size-width (car size-width))
+                        (setcar size-width cur-size-width))
+                    (if (> cur-time-width (car time-width))
+                        (setcar time-width cur-time-width))
+                    (if (> cur-file-width (car file-width))
+                        (setcar file-width cur-file-width)))
+                (message "Skipping %s: wrong info file format." tfile)))
+          (message "Skipping %s: info file not found." tfile)))
       (setq tfa-list (cdr tfa-list)))))
 
 (defun trashed-get-trash-size ()
@@ -316,7 +386,13 @@ EVENT is ignored."
   (setq trashed-current-col col)
   (beginning-of-line)
   (if (tabulated-list-get-id)
-      (forward-char (aref trashed-column-hpos col))))
+      ;; Can't use (forward-char n) as there could be 2 width char
+      (let ((hpos (aref trashed-column-hpos col)) cur-width)
+        (while (> hpos 0)
+          (setq cur-width (string-width (char-to-string (char-after)))
+                hpos (- hpos cur-width))
+          (unless (and (< hpos 1) (> cur-width 1)) ;; the last char width is >1
+            (forward-char))))))
 
 (defun trashed-reset-hpos ()
   "Set horizontal cursor position to default column."
@@ -488,6 +564,8 @@ Customization variables:
 
   `trashed-use-header-line'
   `trashed-sort-key'
+  `trashed-file-size-format'
+  `trashed-deletion-time-format'
   `trashed-action-confirmer'
 
 Hooks:
@@ -500,11 +578,12 @@ Hooks:
 Keybindings:
 
 \\{trashed-mode-map}"
-  (setq tabulated-list-format [("T"           1 t)
-			       ("Size"        7 trashed-size-sorter
-                                                  :right-align t)
-			       ("Deleted at" 19 t :right-align t)
-			       ("File"       47 t)]
+  ;; Column widths of size/time/file are set in `trashed-read-files'
+  (setq tabulated-list-format [("T"             1 t)
+			       ("Size"          0 trashed-size-sorter
+                                                    :right-align t)
+			       ("Deletion Time" 0 t :right-align t)
+			       ("File"          0 t)]
         tabulated-list-sort-key trashed-sort-key
         tabulated-list-printer 'trashed-list-print-entry
         tabulated-list-padding 2
