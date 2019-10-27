@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.3
+;; Version: 1.3.1
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -280,6 +280,19 @@ See PREDICATE description of `sort' for F1 and F2."
   (> (string-to-number (aref (cadr f1) 1))
      (string-to-number (aref (cadr f2) 1))))
 
+(defun trashed-update-col-width (col width)
+  "Update column COL's width with WIDTH.
+If WIDTH is nil, set width of column COL to its header name width.
+If WIDTH is a number and greater than current width, set current width
+to WIDTH."
+  (let ((current-width (cdr (aref tabulated-list-format col))))
+    (if (null width)
+        (let ((column-name (car (aref tabulated-list-format col))))
+          ;; 3 = 1 blank + sorting arrow width which could be 2
+          (setcar current-width (+ (string-width column-name) 3)))
+      (if (> width (car current-width))
+          (setcar current-width width)))))
+
 (defun trashed-read-files ()
   "Read trash information from trash files and info directories.
 The information is stored in `tabulated-list-entries', where ID is trash file
@@ -287,21 +300,12 @@ name in files directory, and DESC is a vector of file type(-/D), size,
 data & time and original name."
   (let* ((tfa-list (ignore-errors (directory-files-and-attributes
                                    trashed-files-dir nil nil t)))
-         tfile fattr ifile infostr fd ft fs fn
-         size-name time-name file-name size-width time-width file-width
-         cur-size-width cur-time-width cur-file-width)
+         tfile fattr ifile infostr fd ft fs fn)
     (setq tabulated-list-entries nil)
     ;; Initialize column width
-    (setq size-name (car (aref tabulated-list-format 1))
-          time-name (car (aref tabulated-list-format 2))
-          file-name (car (aref tabulated-list-format 3))
-          size-width (cdr (aref tabulated-list-format 1))
-          time-width (cdr (aref tabulated-list-format 2))
-          file-width (cdr (aref tabulated-list-format 3)))
-    ;; 3 = 1 blank + sorting arrow which could be width 2
-    (setcar size-width (+ (string-width size-name) 3))
-    (setcar time-width (+ (string-width time-name) 3))
-    (setcar file-width (+ (string-width file-name) 3))
+    (trashed-update-col-width 1 nil)
+    (trashed-update-col-width 2 nil)
+    (trashed-update-col-width 3 nil)
     ;; Start parsing
     (while tfa-list
       (setq tfile (caar tfa-list)
@@ -335,18 +339,11 @@ data & time and original name."
                     (setq tabulated-list-entries
                           (cons (list tfile (vector ft fs fd fn))
                                 tabulated-list-entries))
-                    ;; Lengthen column width if needed
-                    (setq cur-size-width (string-width
-                                          (trashed-format-size-string fs))
-                          cur-time-width (string-width
-                                          (trashed-format-time-string fd))
-                          cur-file-width (string-width fn))
-                    (if (> cur-size-width (car size-width))
-                        (setcar size-width cur-size-width))
-                    (if (> cur-time-width (car time-width))
-                        (setcar time-width cur-time-width))
-                    (if (> cur-file-width (car file-width))
-                        (setcar file-width cur-file-width)))
+                    (trashed-update-col-width
+                     1 (string-width (trashed-format-size-string fs)))
+                    (trashed-update-col-width
+                     2 (string-width (trashed-format-time-string fd)))
+                    (trashed-update-col-width 3 (string-width fn)))
                 (message "Skipping %s: wrong info file format." tfile)))
           (message "Skipping %s: info file not found." tfile)))
       (setq tfa-list (cdr tfa-list)))))
