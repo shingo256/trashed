@@ -7,7 +7,7 @@ Open, view, restore or permanently delete trashed files or directories in trash 
 The trash can has to be compliant with freedesktop.org spec in
 <http://freedesktop.org/wiki/Specifications/trash-spec/>
 
-Note that it's basically for Linux including WSL but not Windows or mac OS.
+Note that it's basically for Emacs on Linux including Windows Linux but not Native Windows or Mac OS.
 
 ## Installation
 

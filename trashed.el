@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.3.1
+;; Version: 1.4
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -113,7 +113,7 @@ Formatting is done with `format-time-string'.  See the function for details."
   "Face name used for trash marks.")
 
 (defface trashed-restored
-  '((t (:inherit font-lock-keyword-face :weight bold)))
+  '((t (:inherit success)))
   "Face used for files flagged for restration."
   :group 'trashed-faces)
 (defvar trashed-restored-face 'trashed-restored
@@ -138,6 +138,13 @@ Formatting is done with `format-time-string'.  See the function for details."
   "Face used for directories."
   :group 'trashed-faces)
 (defvar trashed-directory-face 'trashed-directory
+  "Face name used for directories.")
+
+(defface trashed-symlink
+  '((t (:inherit font-lock-keyword-face)))
+  "Face used for directories."
+  :group 'trashed-faces)
+(defvar trashed-symlink-face 'trashed-symlink
   "Face name used for directories.")
 
 ;;; Local variables
@@ -226,17 +233,15 @@ This is automatically set in `trashed-readin'.")
   "Current column id for column forward/backward movement.")
 
 (defvar trashed-font-lock-keywords
-  `((,(concat "^[" (char-to-string trashed-res-char)
-              (char-to-string trashed-del-char)
-              (char-to-string trashed-marker-char) "]")
-     . trashed-mark-face)
+  `(("^." . trashed-mark-face)
     (,(concat "^" (char-to-string trashed-res-char))
      (".+" (trashed-reset-hpos) nil (0 trashed-restored-face)))
     (,(concat "^" (char-to-string trashed-del-char))
      (".+" (trashed-reset-hpos) nil (0 trashed-deleted-face)))
     (,(concat "^" (char-to-string trashed-marker-char))
      (".+" (trashed-reset-hpos) nil (0 trashed-marked-face)))
-    ("^. d" ".+" (trashed-reset-hpos) nil (0 trashed-directory-face)))
+    ("^. d" ".+" (trashed-reset-hpos) nil (0 trashed-directory-face))
+    ("^. l" ".+" (trashed-reset-hpos) nil (0 trashed-symlink-face)))
   "Font lock keywords for Trashed mode.")
 
 ;;; Internal functions
@@ -282,9 +287,9 @@ See PREDICATE description of `sort' for F1 and F2."
 
 (defun trashed-update-col-width (col width)
   "Update column COL's width with WIDTH.
-If WIDTH is nil, set width of column COL to its header name width.
-If WIDTH is a number and greater than current width, set current width
-to WIDTH."
+If WIDTH is nil, set width to its header name width.
+If WIDTH is a number and greater than current width,
+set current width to WIDTH."
   (let ((current-width (cdr (aref tabulated-list-format col))))
     (if (null width)
         (let ((column-name (car (aref tabulated-list-format col))))
@@ -293,60 +298,73 @@ to WIDTH."
       (if (> width (car current-width))
           (setcar current-width width)))))
 
+(defun trashed-read-trashinfo (trashinfo-file)
+  "Return list of original file path and deletion date for TRASHINFO-FILE."
+  (with-temp-buffer
+    (insert-file-contents trashinfo-file)
+    (let* ((path (when (re-search-forward (rx bol "Path" (0+ blank) "="
+                                              (0+ blank) (group (1+ nonl)))
+                                          nil t)
+                   (match-string 1)))
+           (deletion-date (progn
+                            (goto-char (point-min))
+                            (when (re-search-forward
+                                   (rx bol "DeletionDate" (0+ blank) "="
+                                       (0+ blank) (group (1+ nonl)))
+                                   nil t)
+                              (parse-iso8601-time-string (match-string 1))))))
+      (cons path deletion-date))))
+
+(defun trashed-file-info (name attrs)
+  "Return list of name and vector of a trash file for `tabulated-list-entries'.
+NAME and ATTRS are name and attributes of the trash file."
+  (if (null (or (string= name ".") (string= name "..")))
+      (let ((info-file (expand-file-name (concat name ".trashinfo")
+                                         trashed-info-dir)))
+        (if (or (file-readable-p info-file)
+                ;; Workaround for Emacs bug #37922
+                (file-readable-p (setq info-file (expand-file-name
+                                                  name trashed-info-dir))))
+            (let* ((trashinfo (trashed-read-trashinfo info-file))
+                   (path (car trashinfo))
+                   (deletion-date (cdr trashinfo)))
+              (if (and path deletion-date)
+                  (let ((type (substring (nth 8 attrs) 0 1)) ;; file type
+                        (size (number-to-string (nth 7 attrs))) ;; file size
+                        (time (format "%07d %05d"
+                                      (car deletion-date) (cadr deletion-date)))
+                        (file (propertize (decode-coding-string
+                                           (url-unhex-string path)
+                                           'utf-8)
+                                          'mouse-face 'highlight)))
+                    ;; Lengthen column width if needed
+                    (trashed-update-col-width
+                     1 (string-width (trashed-format-size-string size)))
+                    (trashed-update-col-width
+                     2 (string-width (trashed-format-time-string time)))
+                    (trashed-update-col-width 3 (string-width file))
+                    ;; File info
+                    (list name (vector type size time file)))
+                (message "Skipping %s: wrong info file format." name)
+                nil))
+          (message "Skipping %s: cannot find or read info file." name)
+          nil))))
+
 (defun trashed-read-files ()
   "Read trash information from trash files and info directories.
 The information is stored in `tabulated-list-entries', where ID is trash file
 name in files directory, and DESC is a vector of file type(-/D), size,
-data & time and original name."
-  (let* ((tfa-list (ignore-errors (directory-files-and-attributes
-                                   trashed-files-dir nil nil t)))
-         tfile fattr ifile infostr fd ft fs fn)
-    (setq tabulated-list-entries nil)
-    ;; Initialize column width
-    (trashed-update-col-width 1 nil)
-    (trashed-update-col-width 2 nil)
-    (trashed-update-col-width 3 nil)
-    ;; Start parsing
-    (while tfa-list
-      (setq tfile (caar tfa-list)
-            fattr (cdar tfa-list)
-            ft (substring (nth 8 fattr) 0 1) ;; type
-            fs (number-to-string (nth 7 fattr))) ;; size
-      (when (null (or (equal tfile ".") (equal tfile "..")))
-        (setq ifile (expand-file-name (concat tfile ".trashinfo")
-                                      trashed-info-dir))
-        (if (or (file-exists-p ifile)
-                ;; Workaround for Emacs bug #37922
-                (file-exists-p (setq ifile (expand-file-name
-                                            tfile trashed-info-dir))))
-            (progn
-              (setq infostr
-                    (with-temp-buffer
-                      (insert-file-contents ifile)
-                      (buffer-substring-no-properties (point-min) (point-max))))
-              (if (string-match
-                   "\nPath *= *\\(.+\\)\nDeletionDate *= *\\(.+\\)\n" infostr)
-                  (progn
-                    (setq fd (match-string 2 infostr)
-                          fn (match-string 1 infostr))
-                    (setq fd (parse-iso8601-time-string fd)
-                          ;; column descriptor must be a string
-                          fd (format "%07d %05d" (car fd) (cadr fd))
-                          fn (propertize (decode-coding-string
-                                          (url-unhex-string fn)
-                                          'utf-8)
-                                         'mouse-face 'highlight))
-                    (setq tabulated-list-entries
-                          (cons (list tfile (vector ft fs fd fn))
-                                tabulated-list-entries))
-                    (trashed-update-col-width
-                     1 (string-width (trashed-format-size-string fs)))
-                    (trashed-update-col-width
-                     2 (string-width (trashed-format-time-string fd)))
-                    (trashed-update-col-width 3 (string-width fn)))
-                (message "Skipping %s: wrong info file format." tfile)))
-          (message "Skipping %s: info file not found." tfile)))
-      (setq tfa-list (cdr tfa-list)))))
+deletion time and original file name."
+  ;; Initialize column width
+  (trashed-update-col-width 1 nil)
+  (trashed-update-col-width 2 nil)
+  (trashed-update-col-width 3 nil)
+  ;; Read files
+  (let* ((files (directory-files-and-attributes trashed-files-dir nil nil t))
+         (entries (cl-loop for (name . attrs) in files
+                           for entry = (trashed-file-info name attrs)
+                           when entry collect entry)))
+    (setq tabulated-list-entries entries)))
 
 (defun trashed-get-trash-size ()
   "Issue du shell command to get total Trash Can size."
@@ -446,7 +464,7 @@ or it was cancelled by user."
          (rename-file file newname t)
        t))
     (file-error
-     (if (equal (cadr err) "File is a directory")
+     (if (string= (cadr err) "File is a directory")
          (if (apply trashed-action-confirmer
                     (list (format
                            "Directory %s already exists; restore it anyway? "
@@ -527,7 +545,7 @@ When MARK-ACTION is:
                 (expand-file-name (aref entry 3))))
               ((or (and (null mark-action) (eq m trashed-del-char))
                    (and (eq mark-action 'delete) (eq m trashed-marker-char)))
-               (if (equal (aref entry 0) "d")
+               (if (string= (aref entry 0) "d")
                    (delete-directory (expand-file-name trash-file-name
                                                        trashed-files-dir)
                                      t)
@@ -540,11 +558,11 @@ When MARK-ACTION is:
                                              trashed-info-dir))
               (tabulated-list-delete-entry)
               ;; Delete from `tabulated-list-entries'
-              (if (equal (caar tabulated-list-entries) trash-file-name)
+              (if (string= (caar tabulated-list-entries) trash-file-name)
                   (setq tabulated-list-entries (cdr tabulated-list-entries))
                 (let ((tail tabulated-list-entries) tail-cdr)
                   (while (setq tail-cdr (cdr tail))
-                    (setq tail (if (equal (caar tail-cdr) trash-file-name)
+                    (setq tail (if (string= (caar tail-cdr) trash-file-name)
                                    (progn (setcdr tail (cdr tail-cdr)) nil)
                                  tail-cdr))))))
           (forward-line)))
