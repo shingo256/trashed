@@ -7,7 +7,7 @@ Open, view, restore or permanently delete trashed files or directories in trash 
 The trash can has to be compliant with freedesktop.org spec in
 <http://freedesktop.org/wiki/Specifications/trash-spec/>
 
-Note that it's basically for Emacs on Linux including Windows Linux but not Native Windows or Mac OS.
+Note that it is basically for Emacs on Linux including Windows Subsystem for Linux but not native Windows or Mac OS, which have their proprietary trash can mechanisms.
 
 ## Installation
 
@@ -27,12 +27,17 @@ Open Trashed with <kbd>`M-x trashed` [RET]</kbd>, or use your favorite key bindi
 (global-set-key "\C-xt" 'trashed)
 ```
 
-In Trashed, open or view file with <kbd>f</kbd> or <kbd>v</kbd>, restore file with <kbd>R</kbd> or permanently delete file with <kbd>D</kbd>.
+In Trashed, open or view file with <kbd>f</kbd>, <kbd>v</kbd> or <kbd>e</kbd>, restore file with <kbd>R</kbd> or permanently delete file with <kbd>D</kbd>.
 
-If you want to do the action for multiple files or directories at one time, mark them with <kbd>m</kbd> and execute the action with <kbd>R</kbd> or <kbd>D</kbd>.
+If you want to do the action for multiple files at one time, mark them with <kbd>m</kbd> and execute the action with <kbd>R</kbd> or <kbd>D</kbd>.
 
 Also, you can flag files for restoration or deletion with <kbd>r</kbd> or <kbd>d</kbd> and then execute the action with <kbd>x</kbd>.
 
+Regular expression based marking can be used with <kbd>% m</kbd>, <kbd>% r</kbd> or <kbd>% d</kbd>.
+
 If you want to simply empty trash can, just type <kbd>M</kbd> to mark all and type <kbd>D</kbd>.
 
+Unmark or unmark all is done with <kbd>u</kbd> or <kbd>U</kbd>.
+
 See more information with <kbd>C-h m</kbd>.
+
