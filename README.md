@@ -39,4 +39,4 @@ If you want to simply empty trash can, just type <kbd>M</kbd> to mark all and ty
 
 Unmark or unmark all is done with <kbd>u</kbd> or <kbd>U</kbd>.
 
-See more information with <kbd>C-h m</kbd>.
+See more information with <kbd>C-h</kbd><kbd>m</kbd>.
