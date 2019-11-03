@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.5
+;; Version: 1.6
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -19,7 +19,7 @@
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 
@@ -83,6 +83,7 @@ Formatting is done with `format-time-string'.  See the function for details."
   :group 'trashed
   :type 'hook)
 
+;; It's defined in define-derived-mode, but make it customizable here
 (defcustom trashed-mode-hook nil
   "Run at the very end of `trashed-mode'."
   :group 'trashed
@@ -114,7 +115,7 @@ Formatting is done with `format-time-string'.  See the function for details."
 
 (defface trashed-restored
   '((t (:inherit success)))
-  "Face used for files flagged for restration."
+  "Face used for files flagged for restoration."
   :group 'trashed-faces)
 (defvar trashed-restored-face 'trashed-restored
   "Face name used for files flagged for restoration.")
@@ -523,7 +524,7 @@ or it was cancelled by user."
 
 (defun trashed-do-execute-internal (mark-action)
   "Internal function to actually restore/delete files.
-Restiration/deletion is done acording to MARK-ACTION and each tag status.
+Restoration/deletion is done according to MARK-ACTION and each tag status.
 When MARK-ACTION is:
 
   nil     -- restore/delete files with flag R/D.
@@ -599,10 +600,10 @@ Customization variables:
 
 Hooks:
 
+  `trashed-load-hook'
+  `trashed-mode-hook'
   `trashed-before-readin-hook'
   `trashed-after-readin-hook'
-  `trashed-mode-hook'
-  `trashed-load-hook'
 
 Keybindings:
 
@@ -617,7 +618,7 @@ Keybindings:
         tabulated-list-printer 'trashed-list-print-entry
         tabulated-list-padding 2
         font-lock-defaults '(trashed-font-lock-keywords t))
-  (add-hook 'tabulated-list-revert-hook 'trashed-readin nil t)
+  (add-hook 'tabulated-list-revert-hook #'trashed-readin nil t)
   (font-lock-mode t))
 
 ;;;###autoload
