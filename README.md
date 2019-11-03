@@ -11,7 +11,7 @@ Note that it is basically for Emacs on Linux including Windows Subsystem for Lin
 
 ## Installation
 
-This package is under pull request process on [MELPA](http://melpa.org).  After it's included, you can install it with <kbd>`M-x package-install` [RET] `trashed` [RET]</kbd> from within Emacs.
+This package is under pull request process on [MELPA](http://melpa.org).  After it's included, you can install it with <kbd>`M-x package-install` [RET]</kbd><kbd>`trashed` [RET]</kbd> from within Emacs.
 
 If you want to install manually, just put `trashed.el` somewhere in your load path and add below to `~/.emacs.d/init.el` or `~/.emacs`.
 
@@ -33,11 +33,10 @@ If you want to do the action for multiple files at one time, mark them with <kbd
 
 Also, you can flag files for restoration or deletion with <kbd>r</kbd> or <kbd>d</kbd> and then execute the action with <kbd>x</kbd>.
 
-Regular expression based marking can be used with <kbd>% m</kbd>, <kbd>% r</kbd> or <kbd>% d</kbd>.
+Regular expression based marking can be used with <kbd>%</kbd><kbd>m</kbd>, <kbd>%</kbd><kbd>r</kbd> or <kbd>%</kbd><kbd>d</kbd>.
 
 If you want to simply empty trash can, just type <kbd>M</kbd> to mark all and type <kbd>D</kbd>.
 
 Unmark or unmark all is done with <kbd>u</kbd> or <kbd>U</kbd>.
 
 See more information with <kbd>C-h m</kbd>.
-
