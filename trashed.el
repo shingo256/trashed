@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.7
+;; Version: 1.8
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -193,6 +193,7 @@ Formatting is done with `format-time-string'.  See the function for details."
     (define-key map "r" 'trashed-flag-restore)
     (define-key map "d" 'trashed-flag-delete)
     (define-key map "~" 'trashed-flag-backup-files)
+    (define-key map "#" 'trashed-flag-auto-save-files)
     (define-key map "m" 'trashed-mark)
     (define-key map "u" 'trashed-unmark)
     (define-key map "%r" 'trashed-flag-restore-files-regexp)
@@ -725,6 +726,11 @@ EVENT is the mouse click event."
   "Flag all backup files (names ending with `~') for deletion."
   (interactive)
   (trashed-tag-files-regexp trashed-del-char "~$"))
+
+(defun trashed-flag-auto-save-files ()
+  "Flag all auto save files (names starting & ending with `#') for deletion."
+  (interactive)
+  (trashed-tag-files-regexp trashed-del-char "/#[^#]+#$"))
 
 (defun trashed-mark ()
   "Mark the current line's file for use in later commands."
