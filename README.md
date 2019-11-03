@@ -5,7 +5,7 @@
 Open, view, restore or permanently delete trashed files or directories in trash can with Dired-like look and feel.
 
 The trash can has to be compliant with freedesktop.org spec in
-<http://freedesktop.org/wiki/Specifications/trash-spec/>
+<https://freedesktop.org/wiki/Specifications/trash-spec/>
 
 Note that it is basically for Emacs on Linux including Windows Subsystem for Linux but not native Windows or Mac OS, which have their proprietary trash can mechanisms.
 
