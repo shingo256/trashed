@@ -11,7 +11,7 @@ Note that it is basically for Emacs on Linux including Windows Subsystem for Lin
 
 ## Installation
 
-This package is under pull request process on [MELPA](http://melpa.org).  After it's included, you can install it with <kbd>`M-x package-install` [RET]</kbd><kbd>`trashed` [RET]</kbd> from within Emacs.
+This package is under pull request process on [MELPA](http://melpa.org).  After it's included, you can install it with <kbd>M-x</kbd><kbd>package-install</kbd><kbd>RET</kbd><kbd>trashed</kbd><kbd>RET</kbd> from within Emacs.
 
 If you want to install manually, just put `trashed.el` somewhere in your load path and add below to `~/.emacs.d/init.el` or `~/.emacs`.
 
@@ -21,13 +21,13 @@ If you want to install manually, just put `trashed.el` somewhere in your load pa
 
 ## Usage
 
-Open Trashed with <kbd>`M-x trashed` [RET]</kbd>, or use your favorite key binding like below.
+Open Trashed with <kbd>M-x</kbd><kbd>trashed</kbd><kbd>RET</kbd>, or use your favorite key binding like below.
 
 ``` el
 (global-set-key "\C-xt" 'trashed)
 ```
 
-In Trashed, open or view file with <kbd>f</kbd>, <kbd>v</kbd> or <kbd>e</kbd>, restore file with <kbd>R</kbd> or permanently delete file with <kbd>D</kbd>.
+In Trashed, open, view or browse file with <kbd>f</kbd>, <kbd>v</kbd> or <kbd>e</kbd>, restore file with <kbd>R</kbd> or permanently delete file with <kbd>D</kbd>.
 
 If you want to do the action for multiple files at one time, mark them with <kbd>m</kbd> and execute the action with <kbd>R</kbd> or <kbd>D</kbd>.
 
