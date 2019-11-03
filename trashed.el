@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.6
+;; Version: 1.7
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -191,7 +191,8 @@ Formatting is done with `format-time-string'.  See the function for details."
     (define-key map "W" 'trashed-browse-url-of-file)
     (define-key map [double-mouse-1] 'trashed-mouse-browse-url-of-file)
     (define-key map "r" 'trashed-flag-restore)
-    (define-key map "d" 'trashed-flag-delate)
+    (define-key map "d" 'trashed-flag-delete)
+    (define-key map "~" 'trashed-flag-backup-files)
     (define-key map "m" 'trashed-mark)
     (define-key map "u" 'trashed-unmark)
     (define-key map "%r" 'trashed-flag-restore-files-regexp)
@@ -254,13 +255,12 @@ This is automatically set in `trashed-readin'.")
         ((eq trashed-file-size-format 'human-readable)
          (file-size-human-readable (string-to-number sizestr)))
         ((eq trashed-file-size-format 'with-comma)
-         (let ((size (string-to-number sizestr)) quo rem ret)
+         (let ((size (string-to-number sizestr)) ret)
            (while (> size 0)
-             (setq quo (/ size 1000)
-                   rem (% size 1000)
-                   ret (concat (format (if (>= size 1000) "%03d" "%d") rem)
+             (setq ret (concat (format (if (< size 1000) "%d" "%03d")
+                                       (% size 1000))
                                (if ret "," "") ret)
-                   size quo))
+                   size (/ size 1000)))
            (or ret "0")))
         (t sizestr)))
 
@@ -392,7 +392,7 @@ EVENT is ignored."
         (with-current-buffer trashed-buffer
           (rename-buffer (format "%s (%sB)" trashed-buffer-name size))))))
 
-(defun trashed-set-vpos ()
+(defun trashed-reset-vpos ()
   "Set vertical cursor position to `trashed-default-vpos'."
   (goto-char (point-min))
   (forward-line (1- trashed-default-vpos)))
@@ -446,7 +446,7 @@ EVENT is ignored."
   "Return the number of tagged files with TAG."
   (let ((ret 0))
     (save-excursion
-      (trashed-set-vpos)
+      (trashed-reset-vpos)
       (while (tabulated-list-get-id)
         (if (eq (char-after) tag) (setq ret (1+ ret)))
         (forward-line)))
@@ -474,23 +474,27 @@ or it was cancelled by user."
            t)
        (error "%s" (error-message-string err))))))
 
-(defun trashed-tag-files-regexp (prompt tag)
-  "TAG all files matching regular expression with prompt beginning with PROMPT."
-  (let ((regexp (read-regexp
-                 (concat prompt " files (regexp): ")
-                 ;; Add more suggestions into the default list
-                 (cons nil
-                       (and (tabulated-list-get-id)
-                            (list (aref (tabulated-list-get-entry) 3)
-                                  (concat
-                                   (regexp-quote
-                                    (file-name-extension
-                                     (aref (tabulated-list-get-entry) 3) t))
-                                   "\\'"))))
-                 'trashed-regexp-history))
-        (n 0))
+(defun trashed-tag-files-regexp (tag &optional regexp prompt)
+  "TAG all files matching regular expression REGEXP.
+If REGEXP is nil, read it using `read-regexp' with a prompt beginning with
+PROMPT."
+  (let ((n 0))
+    (or regexp
+        (setq regexp
+              (read-regexp
+               (concat prompt " files (regexp): ")
+               ;; Add more suggestions into the default list
+               (cons nil
+                     (and (tabulated-list-get-id)
+                          (list (aref (tabulated-list-get-entry) 3)
+                                (concat
+                                 (regexp-quote
+                                  (file-name-extension
+                                   (aref (tabulated-list-get-entry) 3) t))
+                                 "\\'"))))
+               'trashed-regexp-history)))
     (save-excursion
-      (trashed-set-vpos)
+      (trashed-reset-vpos)
       (while (tabulated-list-get-id)
         (when (string-match regexp (aref (tabulated-list-get-entry) 3))
           (tabulated-list-put-tag (char-to-string tag))
@@ -535,7 +539,7 @@ When MARK-ACTION is:
         (isfx ".trashinfo")
         (isfxlen (length isfx)))
     (save-excursion
-      (trashed-set-vpos)
+      (trashed-reset-vpos)
       (while (setq trash-file-name (tabulated-list-get-id))
         (setq m (char-after)
               entry (tabulated-list-get-entry))
@@ -636,7 +640,7 @@ compliant with freedesktop.org specification in
          (setq trashed-buffer (get-buffer-create trashed-buffer-name)))
         (trashed-mode)
         (revert-buffer)
-        (trashed-set-vpos)
+        (trashed-reset-vpos)
         (trashed-reset-hpos))
     (pop-to-buffer trashed-buffer)))
 
@@ -711,11 +715,16 @@ EVENT is the mouse click event."
   (tabulated-list-put-tag (char-to-string trashed-res-char) t)
   (trashed-reset-hpos))
 
-(defun trashed-flag-delate ()
+(defun trashed-flag-delete ()
   "Flag the current line's file for deletion."
   (interactive)
   (tabulated-list-put-tag (char-to-string trashed-del-char) t)
   (trashed-reset-hpos))
+
+(defun trashed-flag-backup-files ()
+  "Flag all backup files (names ending with `~') for deletion."
+  (interactive)
+  (trashed-tag-files-regexp trashed-del-char "~$"))
 
 (defun trashed-mark ()
   "Mark the current line's file for use in later commands."
@@ -733,7 +742,7 @@ EVENT is the mouse click event."
   "Mark all files for use in later commands."
   (interactive)
   (save-excursion
-    (trashed-set-vpos)
+    (trashed-reset-vpos)
     (while (tabulated-list-get-id)
       (tabulated-list-put-tag (char-to-string trashed-marker-char) t))))
 
@@ -741,7 +750,7 @@ EVENT is the mouse click event."
   "Unmark all files."
   (interactive)
   (save-excursion
-    (trashed-set-vpos)
+    (trashed-reset-vpos)
     (while (tabulated-list-get-id)
       (tabulated-list-put-tag (char-to-string ? ) t))))
 
@@ -751,7 +760,7 @@ Files marked with other flags (such as ‘D’) are not affected."
   (interactive)
   (save-excursion
     (let (c)
-      (trashed-set-vpos)
+      (trashed-reset-vpos)
       (while (tabulated-list-get-id)
         (setq c (char-after))
         (cond ((eq c ? )
@@ -763,22 +772,22 @@ Files marked with other flags (such as ‘D’) are not affected."
 (defun trashed-flag-restore-files-regexp ()
   "Flag all files matching regular expression for restoration."
   (interactive)
-  (trashed-tag-files-regexp "Restore" trashed-res-char))
+  (trashed-tag-files-regexp trashed-res-char nil "Restore"))
 
 (defun trashed-flag-delete-files-regexp ()
   "Flag all files matching regular expression for deletion."
   (interactive)
-  (trashed-tag-files-regexp "Delete" trashed-del-char))
+  (trashed-tag-files-regexp trashed-del-char nil "Delete"))
 
 (defun trashed-mark-files-regexp ()
   "Mark all files matching regular expression for use in later commands."
   (interactive)
-  (trashed-tag-files-regexp "Mark" trashed-marker-char))
+  (trashed-tag-files-regexp trashed-marker-char nil "Mark"))
 
 (defun trashed-unmark-files-regexp ()
   "Unmark all files matching regular expression."
   (interactive)
-  (trashed-tag-files-regexp "Unmark" ? ))
+  (trashed-tag-files-regexp ?  nil "Unmark"))
 
 (defun trashed-do-restore ()
   "Restore all marked files.
