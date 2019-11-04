@@ -11,7 +11,7 @@ Note that it is basically for Emacs on Linux including Windows Subsystem for Lin
 
 ## Installation
 
-This package is under pull request process on [MELPA](http://melpa.org).  After it's included, you can install it with <kbd>M-x</kbd><kbd>package-install</kbd><kbd>RET</kbd><kbd>trashed</kbd><kbd>RET</kbd> from within Emacs.
+This package is available on [MELPA](http://melpa.org).  You can install it with <kbd>M-x</kbd><kbd>package-install</kbd><kbd>RET</kbd><kbd>trashed</kbd><kbd>RET</kbd> from within Emacs.
 
 If you want to install manually, just put `trashed.el` somewhere in your load path and add below to `~/.emacs.d/init.el` or `~/.emacs`.
 
