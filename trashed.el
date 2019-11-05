@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.8.2
+;; Version: 1.8.3
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -403,7 +403,6 @@ EVENT is ignored."
 
 (defun trashed-set-hpos (col)
   "Set horizontal cursor position to column COL."
-  (setq trashed-current-col col)
   (beginning-of-line)
   (if (tabulated-list-get-id)
       ;; Can't use (forward-char n) as there could be 2 width char
@@ -414,8 +413,10 @@ EVENT is ignored."
           (unless (and (< hpos 1) (> cur-width 1)) ;; the last char width is >1
             (forward-char))))))
 
-(defun trashed-reset-hpos ()
-  "Set horizontal cursor position to default column."
+(defun trashed-reset-hpos (&optional reset-col)
+  "Set horizontal cursor position to the default column.
+RESET-COL, if t, means reset current column position to the default as well."
+  (if reset-col (setq trashed-current-col trashed-default-col))
   (trashed-set-hpos trashed-default-col))
 
 (defun trashed-readin ()
@@ -645,32 +646,34 @@ compliant with freedesktop.org specification in
         (trashed-mode)
         (revert-buffer)
         (trashed-reset-vpos)
-        (trashed-reset-hpos))
+        (trashed-reset-hpos t))
     (pop-to-buffer trashed-buffer)))
 
 (defun trashed-previous-line ()
   "Move up one line then position at File column."
   (interactive)
   (forward-line -1)
-  (trashed-reset-hpos))
+  (trashed-reset-hpos t))
 
 (defun trashed-next-line ()
   "Move down one line then position at File column."
   (interactive)
   (forward-line 1)
-  (trashed-reset-hpos))
+  (trashed-reset-hpos t))
 
 (defun trashed-forward-column ()
   "Move point to the forward column position."
   (interactive)
-  (trashed-set-hpos (mod (1+ trashed-current-col)
-                         (length tabulated-list-format))))
+  (setq trashed-current-col (mod (1+ trashed-current-col)
+                                 (length tabulated-list-format)))
+  (trashed-set-hpos trashed-current-col))
 
 (defun trashed-backward-column ()
   "Move point to the backward column position."
   (interactive)
-  (trashed-set-hpos (mod (1- trashed-current-col)
-                         (length tabulated-list-format))))
+  (setq trashed-current-col (mod (1- trashed-current-col)
+                                 (length tabulated-list-format)))
+  (trashed-set-hpos trashed-current-col))
 
 (defun trashed-find-file ()
   "Visit the file on this line."
@@ -717,13 +720,13 @@ EVENT is the mouse click event."
   "Flag the current line's file for restoration."
   (interactive)
   (tabulated-list-put-tag (char-to-string trashed-res-char) t)
-  (trashed-reset-hpos))
+  (trashed-reset-hpos t))
 
 (defun trashed-flag-delete ()
   "Flag the current line's file for deletion."
   (interactive)
   (tabulated-list-put-tag (char-to-string trashed-del-char) t)
-  (trashed-reset-hpos))
+  (trashed-reset-hpos t))
 
 (defun trashed-flag-backup-files ()
   "Flag all backup files (names ending with `~') for deletion."
@@ -739,13 +742,13 @@ EVENT is the mouse click event."
   "Mark the current line's file for use in later commands."
   (interactive)
   (tabulated-list-put-tag (char-to-string trashed-marker-char) t)
-  (trashed-reset-hpos))
+  (trashed-reset-hpos t))
 
 (defun trashed-unmark ()
   "Unmark the current line's file."
   (interactive)
   (tabulated-list-put-tag (char-to-string ? ) t)
-  (trashed-reset-hpos))
+  (trashed-reset-hpos t))
 
 (defun trashed-mark-all ()
   "Mark all files for use in later commands."
