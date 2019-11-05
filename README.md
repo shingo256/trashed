@@ -1,4 +1,4 @@
-# Trashed
+# Trashed [![MELPA](https://melpa.org/packages/trashed-badge.svg)](https://melpa.org/#/trashed)
 
 ## Viewing/editing system trash can in Emacs
 
