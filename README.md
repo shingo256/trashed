@@ -7,7 +7,7 @@ Open, view, restore or permanently delete trashed files or directories in trash 
 The trash can has to be compliant with freedesktop.org spec in
 <https://freedesktop.org/wiki/Specifications/trash-spec/>
 
-Note that it is basically for Emacs on Linux including Windows Subsystem for Linux but not native Windows or Mac OS, which have their proprietary trash can mechanisms.  In Emacs, You can trash files by deleting them when `delete-by-moving-to-trash` is t.  This package gives you a simple but convenient user interface to manage them.
+In Emacs, You can trash files by deleting them with setting `delete-by-moving-to-trash` to t.  This package provides a simple but convenient user interface to manage those trashed files.  Note that native Windows Emacs (so-called NTEmacs, NOT Emacs on Windows Subsystem for Linux) uses Windows native trash can mechanism, which is out of scope of this package.
 
 ## Installation
 
@@ -38,6 +38,8 @@ Regular expression based marking can be used with <kbd>%</kbd><kbd>m</kbd>, <kbd
 If you want to simply empty trash can, just type <kbd>M</kbd> to mark all and type <kbd>D</kbd>.
 
 Unmark or unmark all is done with <kbd>u</kbd> or <kbd>U</kbd>.
+
+You can also change sorting order or key by moving column with <kbd>TAB</kbd> or <kbd>Shift-TAB</kbd> and type <kbd>S</kbd>.
 
 See more information with <kbd>C-h</kbd><kbd>m</kbd>.
 
@@ -92,5 +94,5 @@ Run after Trash Can buffer is read in (created or reverted).
 ## TODO
 
   * [ ] Date based marking (mark files 1 month ago or older, etc)
-  * [ ] ...any request is appreciated!
+  * [ ] ...any request/suggestion is appreciated.
   
