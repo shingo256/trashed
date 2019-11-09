@@ -2,12 +2,9 @@
 
 ## Viewing/editing system trash can in Emacs
 
-Open, view, restore or permanently delete trashed files or directories in trash can with Dired-like look and feel.
+Open, view, browse, restore or permanently delete trashed files or directories in trash can with Dired-like look and feel.  The trash can has to be compliant with [freedesktop.org](https://freedesktop.org/wiki/Specifications/trash-spec/), typically stored in ~/.local/share/Trash.  In Emacs, You can trash files by deleting them with `(setq delete-by-moving-to-trash t)`.  This package provides a simple but convenient user interface to manage those trashed files.
 
-The trash can has to be compliant with freedesktop.org spec in
-<https://freedesktop.org/wiki/Specifications/trash-spec/>
-
-In Emacs, You can trash files by deleting them with setting `delete-by-moving-to-trash` to t.  This package provides a simple but convenient user interface to manage those trashed files.  Note that native Windows Emacs (so-called NTEmacs, NOT Emacs on Windows Subsystem for Linux) uses Windows native trash can mechanism, which is out of scope of this package.
+Native Windows Emacs (so-called NTEmacs, NOT Emacs on Windows Subsystem for Linux) uses Windows native trash can by default, which is out of scope of this package.  If you want to use freedesktop based trash can and Trashed in native Windows Emacs, you can do `(fmakunbound 'system-move-file-to-trash)`.
 
 ## Installation
 
@@ -21,7 +18,7 @@ If you want to install manually, just put `trashed.el` somewhere in your load pa
 
 ## Usage
 
-Open Trashed with <kbd>M-x</kbd><kbd>trashed</kbd><kbd>RET</kbd>, or use your favorite key binding like below.
+Open Trashed with <kbd>M-x</kbd><kbd>trashed</kbd><kbd>RET</kbd>, or use your favorite key binding like:
 
 ``` el
 (global-set-key "\C-xt" 'trashed)
@@ -39,7 +36,7 @@ If you want to simply empty trash can, just type <kbd>M</kbd> to mark all and ty
 
 Unmark or unmark all is done with <kbd>u</kbd> or <kbd>U</kbd>.
 
-You can also change sorting order or key by moving column with <kbd>TAB</kbd> or <kbd>Shift-TAB</kbd> and type <kbd>S</kbd>.
+Sorting key/order can be changed by moving column with <kbd>TAB</kbd> or <kbd>Shift-TAB</kbd> to choose the key for sorting and typing <kbd>S</kbd>.
 
 See more information with <kbd>C-h</kbd><kbd>m</kbd>.
 
@@ -57,9 +54,9 @@ Default sort key.  If nil, no additional sorting is performed.  Otherwise, this 
 
 Trash file size format displayed in the list.  Options are below.  Column width is set automatically.
 
-  * ‘plain’ -- Plain number
-  * ‘human-readable’ -- Human readable number formatted with `file-size-human-readable`
-  * ‘with-comma’ -- Number with comma every 3 digits
+  * plain -- Plain number
+  * human-readable -- Human readable number formatted with `file-size-human-readable`
+  * with-comma -- Number with comma every 3 digits
   
 `trashed-date-format`
 
@@ -93,6 +90,7 @@ Run after Trash Can buffer is read in (created or reverted).
 
 ## TODO
 
+  * [ ] Menu bar (does anybody use?)
   * [ ] Date based marking (mark files 1 month ago or older, etc)
-  * [ ] ...any request/suggestion is appreciated.
+  * [ ] ...any request/suggestion is appreciated
   
