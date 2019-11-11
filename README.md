@@ -2,9 +2,9 @@
 
 ## Viewing/editing system trash can in Emacs
 
-Open, view, browse, restore or permanently delete trashed files or directories in trash can with Dired-like look and feel.  The trash can has to be compliant with [freedesktop.org](https://freedesktop.org/wiki/Specifications/trash-spec/), typically stored in ~/.local/share/Trash.  In Emacs, You can trash files by deleting them with `(setq delete-by-moving-to-trash t)`.  This package provides a simple but convenient user interface to manage those trashed files.
+Open, view, browse, restore or permanently delete trashed files or directories in trash can with Dired-like look and feel.  The trash can has to be compliant with [freedesktop.org](https://freedesktop.org/wiki/Specifications/trash-spec/).  In Emacs, You can trash files by deleting them with `(setq delete-by-moving-to-trash t)`.  This package provides a simple but convenient user interface to manage those trashed files.
 
-Native Windows Emacs (so-called NTEmacs, NOT Emacs on Windows Subsystem for Linux) uses Windows native trash can by default, which is out of scope of this package.  If you want to use freedesktop based trash can and Trashed in native Windows Emacs, you can do `(fmakunbound 'system-move-file-to-trash)`.
+Native Windows Emacs (so-called NTEmacs) uses Windows native trash can by default, which is out of scope of this package.  If you want to use freedesktop based trash can and Trashed in native Windows Emacs, you can do `(fmakunbound 'system-move-file-to-trash)`.
 
 ## Installation
 
@@ -24,7 +24,7 @@ Open Trashed with <kbd>M-x</kbd><kbd>trashed</kbd><kbd>RET</kbd>, or use your fa
 (global-set-key "\C-xt" 'trashed)
 ```
 
-In Trashed, open, view or browse file with <kbd>f</kbd>, <kbd>v</kbd> or <kbd>e</kbd>, restore file with <kbd>R</kbd> or permanently delete file with <kbd>D</kbd>.
+In Trashed, open, view or browse file with <kbd>f</kbd>, <kbd>v</kbd> or <kbd>W</kbd>, restore file with <kbd>R</kbd> or permanently delete file with <kbd>D</kbd>.
 
 If you want to do the action for multiple files at one time, mark them with <kbd>m</kbd> and execute the action with <kbd>R</kbd> or <kbd>D</kbd>.
 
@@ -52,7 +52,7 @@ Default sort key.  If nil, no additional sorting is performed.  Otherwise, this 
 
 `trashed-size-format`
 
-Trash file size format displayed in the list.  Options are below.  Column width is set automatically.
+Trash file size format displayed in the list.  Options are below.  Appropriate column width is set automatically.
 
   * plain -- Plain number
   * human-readable -- Human readable number formatted with `file-size-human-readable`
@@ -60,7 +60,7 @@ Trash file size format displayed in the list.  Options are below.  Column width 
   
 `trashed-date-format`
 
-Deletion date format displayed in the list.  Formatting is done with `format-time-string`.  This actually allows you to configure wide variety of format and display it appropriately according to your system locale setting.  See the function for details.  Column width is set automatically.
+Deletion date format displayed in the list.  Formatting is done with the function `format-time-string`.  This actually allows you to configure wide variety of format and display it appropriately according to your system locale setting.  See the function's description for details with <kbd>C-h</kbd><kbd>f</kbd><kbd>format-time-string</kbd>.  Appropriate column width is set automatically.
 
 `trashed-action-confirmer`
 
@@ -90,7 +90,7 @@ Run after Trash Can buffer is read in (created or reverted).
 
 ## TODO
 
-  * [ ] Menu bar (does anybody use?)
+  * [x] Menu bar
   * [ ] Date based marking (mark files 1 month ago or older, etc)
   * [ ] ...any request/suggestion is appreciated
   

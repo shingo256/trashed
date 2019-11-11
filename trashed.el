@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.8.4
+;; Version: 1.8.5
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -202,11 +202,86 @@ Formatting is done with `format-time-string'.  See the function for details."
     (define-key map "%m" 'trashed-mark-files-regexp)
     (define-key map "%u" 'trashed-unmark-files-regexp)
     (define-key map "R" 'trashed-do-restore)
-    (define-key map "D" 'trashed-do-delate)
+    (define-key map "D" 'trashed-do-delete)
     (define-key map "M" 'trashed-mark-all)
     (define-key map "U" 'trashed-unmark-all)
     (define-key map "t" 'trashed-toggle-marks)
     (define-key map "x" 'trashed-do-execute)
+    
+    (define-key map [menu-bar trashed]
+      (cons "Trashed" (make-sparse-keymap "Trashed")))
+    (define-key map [menu-bar trashed do-execute]
+      '(menu-item "Execute Flag" trashed-do-execute
+                  :help "Execute all flagged files"))
+    (define-key map [menu-bar trashed do-delete]
+      '(menu-item "Delete" trashed-do-delete
+                  :help "Delete current file or all marked files"))
+    (define-key map [menu-bar trashed do-restore]
+      '(menu-item "Restore" trashed-do-restore
+                  :help "Restore current file or all marked files"))
+    (define-key map [menu-bar trashed dashes-2]
+      '("--"))
+    (define-key map [menu-bar trashed flag-delete-files-regexp]
+      '(menu-item "Flag Delete Regexp" trashed-flag-delete-files-regexp
+                  :help "Flag all files matching regular expression for deletion"))
+    (define-key map [menu-bar trashed flag-restore-files-regexp]
+      '(menu-item "Flag Restore Regexp" trashed-flag-restore-files-regexp
+                  :help "Flag all files matching regular expression for restoration"))
+    (define-key map [menu-bar trashed unmark-files-regexp]
+      '(menu-item "Unmark Regexp" trashed-unmark-files-regexp
+                  :help "Unmark all files matching regular expression for future operations"))
+    (define-key map [menu-bar trashed mark-files-regexp]
+      '(menu-item "Mark Regexp" trashed-mark-files-regexp
+                  :help "Mark all files matching regular expression for future operations"))
+    (define-key map [menu-bar trashed dashes-1]
+      '("--"))
+    (define-key map [menu-bar trashed auto-save-files]
+      '(menu-item "Flag Auto-save Files" trashed-flag-auto-save-files
+                  :help "Flag auto-save files for deletion"))
+    (define-key map [menu-bar trashed backup-files]
+      '(menu-item "Flag Backup Files" trashed-flag-backup-files
+                  :help "Flag all backup files for deletion"))
+    (define-key map [menu-bar trashed flag-delete]
+      '(menu-item "Flag Delete" trashed-flag-delete
+                  :help "Flag current line's file for deletion"))
+    (define-key map [menu-bar trashed flag-restore]
+      '(menu-item "Flag Restore" trashed-flag-restore
+                  :help "Flag current line's file for restoration"))
+    (define-key map [menu-bar trashed toggle-marks]
+      '(menu-item "Toggle Marks" trashed-toggle-marks
+                  :help "Mark unmarked files, unmark marked ones"))
+    (define-key map [menu-bar trashed unmark-all]
+      '(menu-item "Unmark All" trashed-unmark-all
+                  :help "Unmark or unflag all files"))
+    (define-key map [menu-bar trashed unmark]
+      '(menu-item "Unmark" trashed-unmark
+                  :help "Unmark or unflag current line's file"))
+    (define-key map [menu-bar trashed mark-all]
+      '(menu-item "Mark All" trashed-mark-all
+                  :help "Mark all files for future operations"))
+    (define-key map [menu-bar trashed mark]
+      '(menu-item "Mark" trashed-mark
+                  :help "Mark current line's file for future operations"))
+    (define-key map [menu-bar trashed dashes-0]
+      '("--"))
+    (define-key map [menu-bar trashed revert-buffer]
+      '(menu-item "Refresh" revert-buffer
+                  :help "Refresh Trash Can"))
+    (define-key map [menu-bar trashed browse-url-of-file]
+      '(menu-item "Browse This File" trashed-browse-url-of-file
+                  :help "Ask a browser to display file at cursor"))
+    (define-key map [menu-bar trashed view]
+      '(menu-item "View This File" trashed-view-file
+                  :help "Examine file at cursor in read-only mode"))
+    (define-key map [menu-bar trashed display]
+      '(menu-item "Display in Other Window" trashed-display-file
+                  :help "Display file at cursor in other window"))
+    (define-key map [menu-bar trashed find-file-other-window]
+      '(menu-item "Find in Other Window" trashed-find-file-other-window
+                  :help "find file at cursor in other window"))
+    (define-key map [menu-bar trashed find-file]
+      '(menu-item "Find This File" trashed-find-file
+                  :help "Find file at cursor"))
     map)
   "Local keymap for Trashed mode listings.")
 
@@ -667,10 +742,10 @@ Keybindings:
 \\{trashed-mode-map}"
   ;; Column widths of size/date/name are set in `trashed-read-files'
   (setq tabulated-list-format [("T"            1 t)
-			       ("Size"         0 trashed-size-sorter
+                               ("Size"         0 trashed-size-sorter
                                                    :right-align t)
-			       ("Date deleted" 0 t :right-align t)
-			       ("Name"         0 t)]
+                               ("Date deleted" 0 t :right-align t)
+                               ("Name"         0 t)]
         tabulated-list-sort-key trashed-sort-key
         tabulated-list-printer 'trashed-list-print-entry
         tabulated-list-padding 2
@@ -855,7 +930,7 @@ If no file is marked, restore the file at point."
   (interactive)
   (trashed-do-action 'restore))
 
-(defun trashed-do-delate ()
+(defun trashed-do-delete ()
   "Delete all marked files.
 If no file is marked, delete the file at point."
   (interactive)
