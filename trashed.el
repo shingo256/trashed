@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.8.5
+;; Version: 1.8.6
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -23,14 +23,13 @@
 
 ;;; Commentary:
 
-;; Viewing/editing system trash can -- open, view, restore or permanently
-;; delete trashed files or directories in trash can with Dired-like look and
-;; feel.  The trash can has to be compliant with freedesktop.org spec in
-;; <https://freedesktop.org/wiki/Specifications/trash-spec/>
+;; Viewing/editing system trash can -- open, view, restore or
+;; permanently delete trashed files or directories in trash can with
+;; Dired-like look and feel.  See the website below for details.
+;; <https://github.com/shingo256/trashed>
 
 ;;; Code:
 
-(require 'tabulated-list)
 (require 'parse-time)
 
 ;;; Customization variables
@@ -207,83 +206,63 @@ Formatting is done with `format-time-string'.  See the function for details."
     (define-key map "U" 'trashed-unmark-all)
     (define-key map "t" 'trashed-toggle-marks)
     (define-key map "x" 'trashed-do-execute)
-    
-    (define-key map [menu-bar trashed]
-      (cons "Trashed" (make-sparse-keymap "Trashed")))
-    (define-key map [menu-bar trashed do-execute]
-      '(menu-item "Execute Flag" trashed-do-execute
-                  :help "Execute all flagged files"))
-    (define-key map [menu-bar trashed do-delete]
-      '(menu-item "Delete" trashed-do-delete
-                  :help "Delete current file or all marked files"))
-    (define-key map [menu-bar trashed do-restore]
-      '(menu-item "Restore" trashed-do-restore
-                  :help "Restore current file or all marked files"))
-    (define-key map [menu-bar trashed dashes-2]
-      '("--"))
-    (define-key map [menu-bar trashed flag-delete-files-regexp]
-      '(menu-item "Flag Delete Regexp" trashed-flag-delete-files-regexp
-                  :help "Flag all files matching regular expression for deletion"))
-    (define-key map [menu-bar trashed flag-restore-files-regexp]
-      '(menu-item "Flag Restore Regexp" trashed-flag-restore-files-regexp
-                  :help "Flag all files matching regular expression for restoration"))
-    (define-key map [menu-bar trashed unmark-files-regexp]
-      '(menu-item "Unmark Regexp" trashed-unmark-files-regexp
-                  :help "Unmark all files matching regular expression for future operations"))
-    (define-key map [menu-bar trashed mark-files-regexp]
-      '(menu-item "Mark Regexp" trashed-mark-files-regexp
-                  :help "Mark all files matching regular expression for future operations"))
-    (define-key map [menu-bar trashed dashes-1]
-      '("--"))
-    (define-key map [menu-bar trashed auto-save-files]
-      '(menu-item "Flag Auto-save Files" trashed-flag-auto-save-files
-                  :help "Flag auto-save files for deletion"))
-    (define-key map [menu-bar trashed backup-files]
-      '(menu-item "Flag Backup Files" trashed-flag-backup-files
-                  :help "Flag all backup files for deletion"))
-    (define-key map [menu-bar trashed flag-delete]
-      '(menu-item "Flag Delete" trashed-flag-delete
-                  :help "Flag current line's file for deletion"))
-    (define-key map [menu-bar trashed flag-restore]
-      '(menu-item "Flag Restore" trashed-flag-restore
-                  :help "Flag current line's file for restoration"))
-    (define-key map [menu-bar trashed toggle-marks]
-      '(menu-item "Toggle Marks" trashed-toggle-marks
-                  :help "Mark unmarked files, unmark marked ones"))
-    (define-key map [menu-bar trashed unmark-all]
-      '(menu-item "Unmark All" trashed-unmark-all
-                  :help "Unmark or unflag all files"))
-    (define-key map [menu-bar trashed unmark]
-      '(menu-item "Unmark" trashed-unmark
-                  :help "Unmark or unflag current line's file"))
-    (define-key map [menu-bar trashed mark-all]
-      '(menu-item "Mark All" trashed-mark-all
-                  :help "Mark all files for future operations"))
-    (define-key map [menu-bar trashed mark]
-      '(menu-item "Mark" trashed-mark
-                  :help "Mark current line's file for future operations"))
-    (define-key map [menu-bar trashed dashes-0]
-      '("--"))
-    (define-key map [menu-bar trashed revert-buffer]
-      '(menu-item "Refresh" revert-buffer
-                  :help "Refresh Trash Can"))
-    (define-key map [menu-bar trashed browse-url-of-file]
-      '(menu-item "Browse This File" trashed-browse-url-of-file
-                  :help "Ask a browser to display file at cursor"))
-    (define-key map [menu-bar trashed view]
-      '(menu-item "View This File" trashed-view-file
-                  :help "Examine file at cursor in read-only mode"))
-    (define-key map [menu-bar trashed display]
-      '(menu-item "Display in Other Window" trashed-display-file
-                  :help "Display file at cursor in other window"))
-    (define-key map [menu-bar trashed find-file-other-window]
-      '(menu-item "Find in Other Window" trashed-find-file-other-window
-                  :help "find file at cursor in other window"))
-    (define-key map [menu-bar trashed find-file]
-      '(menu-item "Find This File" trashed-find-file
-                  :help "Find file at cursor"))
+    (define-key map [mouse-3] 'trashed-mouse-popup-menu)
     map)
   "Local keymap for Trashed mode listings.")
+
+(easy-menu-define trashed-menu trashed-mode-map
+  "Menu map for Trashed mode listings."
+  '("Trashed"
+    ["Restore" trashed-do-restore
+     :help "Restore this file or all marked files"]
+    ["Delete" trashed-do-delete
+     :help "Delete this file or all marked files"]
+    "--"
+    ["Find" trashed-find-file
+     :help "Find this file"]
+    ["Find in Other Window" trashed-find-file-other-window
+     :help "find this file in other window"]
+    ["Display in Other Window" trashed-display-file
+     :help "Display this file in other window"]
+    ["View" trashed-view-file
+     :help "Examine this file in read-only mode"]
+    ["Browse" trashed-browse-url-of-file
+     :help "Ask a browser to display this file"]
+    "--"
+    ["Mark" trashed-mark
+     :help "Mark this file for future operations"]
+    ["Mark All" trashed-mark-all
+     :help "Mark all files for future operations"]
+    ["Unmark" trashed-unmark
+     :help "Unmark or unflag this file"]
+    ["Unmark All" trashed-unmark-all
+     :help "Unmark or unflag all files"]
+    ["Toggle Marks" trashed-toggle-marks
+     :help "Mark unmarked files, unmark marked ones"]
+    ["Flag Restore" trashed-flag-restore
+     :help "Flag this file for restoration"]
+    ["Flag Delete" trashed-flag-delete
+     :help "Flag this file for deletion"]
+    ["Flag Backup Files" trashed-flag-backup-files
+     :help "Flag all backup files for deletion"]
+    ["Flag Auto-save Files" trashed-flag-auto-save-files
+     :help "Flag auto-save files for deletion"]
+    ["Execute Flag" trashed-do-execute
+     :help "Execute all flagged files"]
+    "--"
+    ["Mark Regexp" trashed-mark-files-regexp
+     :help "Mark all files matching regular expression for future operations"]
+    ["Unmark Regexp" trashed-unmark-files-regexp
+     :help "Unmark all files matching regular expression"]
+    ["Flag Restore Regexp" trashed-flag-restore-files-regexp
+     :help "Flag all files matching regular expression for restoration"]
+    ["Flag Delete Regexp" trashed-flag-delete-files-regexp
+     :help "Flag all files matching regular expression for deletion"]
+    "--"
+    ["Refresh" revert-buffer
+     :help "Refresh Trash Can"]
+    ["Quit" quit-window
+     :help "Quit Trash Can"]))
 
 (defvar trashed-res-char ?R
   "Character used to flag files for restoration.")
@@ -516,7 +495,7 @@ RESET-COL, if t, means reset current column position to the default as well."
   (tabulated-list-init-header))
 
 (defun trashed-open-file (func)
-  "Open file at point with function FUNC."
+  "Open this file with function FUNC."
   (let ((trash-file-name (tabulated-list-get-id)))
     (if trash-file-name
         (apply func (list (expand-file-name trash-file-name trashed-files-dir)))
@@ -799,12 +778,12 @@ compliant with freedesktop.org specification in
   (trashed-set-hpos trashed-current-col))
 
 (defun trashed-find-file ()
-  "Visit the file on this line."
+  "Visit this file."
   (interactive)
   (trashed-open-file 'find-file))
 
 (defun trashed-find-file-other-window ()
-  "Visit the file on this line in another window."
+  "Visit this file in another window."
   (interactive)
   (trashed-open-file 'find-file-other-window))
 
@@ -817,7 +796,7 @@ EVENT is the mouse click event."
     (trashed-open-file 'find-file-other-window)))
 
 (defun trashed-browse-url-of-file ()
-  "Ask a browser to display the file on this line."
+  "Ask a browser to display this file."
   (interactive)
   (trashed-open-file 'trashed-browse-url-of-file-internal))
 
@@ -830,23 +809,23 @@ EVENT is the mouse click event."
     (trashed-open-file 'trashed-browse-url-of-file-internal)))
 
 (defun trashed-display-file ()
-  "Display the file on this line in another window."
+  "Display this file in another window."
   (interactive)
   (trashed-open-file (lambda (f) (display-buffer (find-file-noselect f) t))))
 
 (defun trashed-view-file ()
-  "Examine a file in view mode, returning when done."
+  "Examine this file in view mode, returning when done."
   (interactive)
   (trashed-open-file 'view-file))
 
 (defun trashed-flag-restore ()
-  "Flag the current line's file for restoration."
+  "Flag this file for restoration."
   (interactive)
   (tabulated-list-put-tag (char-to-string trashed-res-char) t)
   (trashed-reset-hpos t))
 
 (defun trashed-flag-delete ()
-  "Flag the current line's file for deletion."
+  "Flag this file for deletion."
   (interactive)
   (tabulated-list-put-tag (char-to-string trashed-del-char) t)
   (trashed-reset-hpos t))
@@ -862,13 +841,13 @@ EVENT is the mouse click event."
   (trashed-tag-files-regexp trashed-del-char "/#[^#]+#$"))
 
 (defun trashed-mark ()
-  "Mark the current line's file for use in later commands."
+  "Mark this file for use in later commands."
   (interactive)
   (tabulated-list-put-tag (char-to-string trashed-marker-char) t)
   (trashed-reset-hpos t))
 
 (defun trashed-unmark ()
-  "Unmark the current line's file."
+  "Unmark this file."
   (interactive)
   (tabulated-list-put-tag (char-to-string ? ) t)
   (trashed-reset-hpos t))
@@ -926,13 +905,13 @@ Files marked with other flags (such as ‘D’) are not affected."
 
 (defun trashed-do-restore ()
   "Restore all marked files.
-If no file is marked, restore the file at point."
+If no file is marked, restore this file."
   (interactive)
   (trashed-do-action 'restore))
 
 (defun trashed-do-delete ()
   "Delete all marked files.
-If no file is marked, delete the file at point."
+If no file is marked, delete this file."
   (interactive)
   (trashed-do-action 'delete))
 
@@ -950,6 +929,14 @@ If no file is marked, delete the file at point."
                                  (+ nr nd))))
             (trashed-do-execute-internal nil))
       (message "(No actions requested)"))))
+
+(defun trashed-mouse-popup-menu (event)
+  "Popup menu for the file you click on.
+EVENT is the mouse click event."
+  (interactive "e")
+  (with-current-buffer (window-buffer (posn-window (event-end event)))
+    (goto-char (posn-point (event-end event)))
+    (popup-menu trashed-menu)))
 
 (provide 'trashed)
 
