@@ -38,6 +38,8 @@ Unmark or unmark all is done with <kbd>u</kbd> or <kbd>U</kbd>.
 
 Sorting key/order can be changed by moving column with <kbd>TAB</kbd> or <kbd>Shift-TAB</kbd> to choose the key for sorting and typing <kbd>S</kbd>.
 
+You can also use a mouse for most of the operations via menu bar or right click menu.
+
 See more information with <kbd>C-h</kbd><kbd>m</kbd>.
 
 ## Customization
