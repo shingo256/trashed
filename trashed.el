@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.8.6
+;; Version: 1.8.7
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -934,9 +934,19 @@ If no file is marked, delete this file."
   "Popup menu for the file you click on.
 EVENT is the mouse click event."
   (interactive "e")
-  (with-current-buffer (window-buffer (posn-window (event-end event)))
+  (let ((inhibit-read-only t)
+        sp ep cmd)
+    (pop-to-buffer (window-buffer (posn-window (event-end event))))
     (goto-char (posn-point (event-end event)))
-    (popup-menu trashed-menu)))
+    ;; Highlight the file while menu is shown
+    (save-excursion (setq sp (progn (trashed-set-hpos 3) (point))
+                          ep (progn (end-of-line) (point))))
+    (put-text-property sp ep 'font-lock-face 'highlight)
+    (redisplay)
+    (setq cmd (lookup-key trashed-menu
+                          (vector (x-popup-menu event trashed-menu))))
+    (remove-text-properties sp ep '(font-lock-face))
+    (if cmd (call-interactively cmd))))
 
 (provide 'trashed)
 
