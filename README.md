@@ -18,27 +18,35 @@ If you want to install manually, just put `trashed.el` somewhere in your load pa
 
 ## Usage
 
-Open Trashed with <kbd>M-x</kbd><kbd>trashed</kbd><kbd>RET</kbd>, or use your favorite key binding like:
+### Open Trashed
+
+<kbd>M-x</kbd><kbd>trashed</kbd><kbd>RET</kbd>, or use your favorite key binding like:
 
 ``` el
 (global-set-key "\C-xt" 'trashed)
 ```
 
-In Trashed, open, view or browse file with <kbd>f</kbd>, <kbd>v</kbd> or <kbd>W</kbd>, restore file with <kbd>R</kbd> or permanently delete file with <kbd>D</kbd>.
+### Viewing files
 
-If you want to do the action for multiple files at one time, mark them with <kbd>m</kbd> and execute the action with <kbd>R</kbd> or <kbd>D</kbd>.
+Open, view or browse file with <kbd>f</kbd>, <kbd>v</kbd> or <kbd>W</kbd>.  Open or display file in another window with <kbd>o</kbd> or <kbd>Ctrl-o</kbd>.
 
-Or, you can flag one or multiple files for restoration or deletion with <kbd>r</kbd> or <kbd>d</kbd> and then execute the action with <kbd>x</kbd> at one time.
+### Restore/delete files
+
+Restore file with <kbd>R</kbd> or permanently delete file with <kbd>D</kbd>.  If you want to do the action for multiple files at one time, mark them with <kbd>m</kbd> and execute the action with <kbd>R</kbd> or <kbd>D</kbd>.  You can also flag one or multiple files for restoration or deletion with <kbd>r</kbd> or <kbd>d</kbd> and then execute the action with <kbd>x</kbd> at one time.  If you want to simply empty trash can, just type <kbd>M</kbd> to mark all and type <kbd>D</kbd>.  Unmark or unmark all are done with <kbd>u</kbd> or <kbd>U</kbd>.
+
+### Advanced marking
 
 Regular expression based marking can be used with <kbd>%</kbd><kbd>m</kbd>, <kbd>%</kbd><kbd>r</kbd> or <kbd>%</kbd><kbd>d</kbd>.
 
-If you want to simply empty trash can, just type <kbd>M</kbd> to mark all and type <kbd>D</kbd>.
+### Sorting
 
-Unmark or unmark all is done with <kbd>u</kbd> or <kbd>U</kbd>.
+Sorting key or order can be changed by moving column with <kbd>TAB</kbd> or <kbd>Shift-TAB</kbd> to choose the key for sorting and typing <kbd>S</kbd>.  Typing <kbd>S</kbd> again reverts the sorting order.
 
-Sorting key/order can be changed by moving column with <kbd>TAB</kbd> or <kbd>Shift-TAB</kbd> to choose the key for sorting and typing <kbd>S</kbd>.
+### Mouse operation
 
-You can also use a mouse for most of the operations via menu bar or right click menu.
+You can use mouse for the operations above via right click menu or menu bar.
+
+### Help
 
 See more information with <kbd>C-h</kbd><kbd>m</kbd>.
 
