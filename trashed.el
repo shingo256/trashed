@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.8.7
+;; Version: 1.9.0
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -200,6 +200,10 @@ Formatting is done with `format-time-string'.  See the function for details."
     (define-key map "%d" 'trashed-flag-delete-files-regexp)
     (define-key map "%m" 'trashed-mark-files-regexp)
     (define-key map "%u" 'trashed-unmark-files-regexp)
+    (define-key map "$r" 'trashed-flag-restore-files-by-date)
+    (define-key map "$d" 'trashed-flag-delete-files-by-date)
+    (define-key map "$m" 'trashed-mark-files-by-date)
+    (define-key map "$u" 'trashed-unmark-files-by-date)
     (define-key map "R" 'trashed-do-restore)
     (define-key map "D" 'trashed-do-delete)
     (define-key map "M" 'trashed-mark-all)
@@ -231,33 +235,45 @@ Formatting is done with `format-time-string'.  See the function for details."
     "--"
     ["Mark" trashed-mark
      :help "Mark this file for future operations"]
-    ["Mark All" trashed-mark-all
-     :help "Mark all files for future operations"]
-    ["Unmark" trashed-unmark
-     :help "Unmark or unflag this file"]
-    ["Unmark All" trashed-unmark-all
-     :help "Unmark or unflag all files"]
-    ["Toggle Marks" trashed-toggle-marks
-     :help "Mark unmarked files, unmark marked ones"]
     ["Flag Restore" trashed-flag-restore
      :help "Flag this file for restoration"]
     ["Flag Delete" trashed-flag-delete
      :help "Flag this file for deletion"]
-    ["Flag Backup Files" trashed-flag-backup-files
-     :help "Flag all backup files for deletion"]
-    ["Flag Auto-save Files" trashed-flag-auto-save-files
-     :help "Flag auto-save files for deletion"]
     ["Execute Flag" trashed-do-execute
      :help "Execute all flagged files"]
+    ["Unmark" trashed-unmark
+     :help "Unmark or unflag this file"]
+     "--"
+    ["Mark All" trashed-mark-all
+     :help "Mark all files for future operations"]
+    ["Unmark All" trashed-unmark-all
+     :help "Unmark or unflag all files"]
+    ["Toggle Marks" trashed-toggle-marks
+     :help "Mark unmarked files, unmark marked ones"]
+    ["Flag Backup Files" trashed-flag-backup-files
+     :help "Flag all backup files for deletion"]
+    ["Flag Auto-Save Files" trashed-flag-auto-save-files
+     :help "Flag auto-save files for deletion"]
     "--"
-    ["Mark Regexp" trashed-mark-files-regexp
-     :help "Mark all files matching regular expression for future operations"]
-    ["Unmark Regexp" trashed-unmark-files-regexp
-     :help "Unmark all files matching regular expression"]
-    ["Flag Restore Regexp" trashed-flag-restore-files-regexp
-     :help "Flag all files matching regular expression for restoration"]
-    ["Flag Delete Regexp" trashed-flag-delete-files-regexp
-     :help "Flag all files matching regular expression for deletion"]
+    ("Advanced Marking"
+     "--"
+     ["Mark Regexp" trashed-mark-files-regexp
+      :help "Mark all files matching regular expression for future operations"]
+     ["Flag Restore Regexp" trashed-flag-restore-files-regexp
+      :help "Flag all files matching regular expression for restoration"]
+     ["Flag Delete Regexp" trashed-flag-delete-files-regexp
+      :help "Flag all files matching regular expression for deletion"]
+     ["Unmark Regexp" trashed-unmark-files-regexp
+      :help "Unmark all files matching regular expression"]
+     "--"
+     ["Mark By Date" trashed-mark-files-by-date
+      :help "Mark all files matching date condition for future operations"]
+     ["Flag Restore By Date" trashed-flag-restore-files-by-date
+      :help "Flag all files matching date condition for restoration"]
+     ["Flag Delete By Date" trashed-flag-delete-files-by-date
+      :help "Flag all files matching date condition for deletion"]
+     ["Unmark By Date" trashed-unmark-files-by-date
+      :help "Unmark all files matching date condition"])
     "--"
     ["Refresh" revert-buffer
      :help "Refresh Trash Can"]
@@ -329,14 +345,34 @@ This is automatically set in `trashed-readin'.")
                       (list (string-to-number (match-string 1 datestr))
                             (string-to-number (match-string 2 datestr)))))
 
+ ;; Just to silence byte-compiler for below `tabulated-list--near-rows'
+(defvar tabulated-list--near-rows)
+
 (defun trashed-list-print-entry (id cols)
-  "Wrapper for `tabulated-list-print-entry' to format trash file size and date.
+  "Redefined `tabulated-list-print-entry' to format trash file size and date.
 See the original function for ID and COLS."
-  (tabulated-list-print-entry
-   id (vector (aref cols 0)
-              (trashed-format-size-string (aref cols 1))
-              (trashed-format-date-string (aref cols 2))
-              (aref cols 3))))
+  (let ((fcols (vector (aref cols 0)
+                       (trashed-format-size-string (aref cols 1))
+                       (trashed-format-date-string (aref cols 2))
+                       (aref cols 3)))
+        (beg   (point))
+	(x     (max tabulated-list-padding 0))
+	(ncols (length tabulated-list-format))
+	(inhibit-read-only t))
+    (if (> tabulated-list-padding 0)
+	(insert (make-string x ?\s)))
+    (let ((tabulated-list--near-rows ; Bind it if not bound yet (Bug#25506).
+           (or (bound-and-true-p tabulated-list--near-rows)
+               (list (or (tabulated-list-get-entry (point-at-bol 0))
+                         fcols)
+                     fcols))))
+      (dotimes (n ncols)
+        (setq x (tabulated-list-print-col n (aref fcols n) x))))
+    (insert ?\n)
+    ;; Use cols rather than fcols
+    (add-text-properties
+     beg (point)
+     `(tabulated-list-id ,id tabulated-list-entry ,cols))))
 
 (defun trashed-size-sorter (f1 f2)
   "Sorting function for size sorting.
@@ -609,6 +645,46 @@ PROMPT."
           (setq n (1+ n)))
         (forward-line)))
     (message "%d matching files." n)))
+
+(defun trashed-tag-files-by-date (tag &optional condition prompt)
+  "TAG all files matching date condition CONDITION.
+If CONDITION is nil, read it using `read-regexp' with a prompt beginning with
+PROMPT.
+
+CONDITION must consist of `<'(before) or `>'(after), and `N' days ago.
+For example, `<365' means tag all files deleted before the day 1 year ago,
+`>30' means tag all files deleted after the day 1 month ago,
+`>1' means tag all files deleted today."
+  (let* ((now-list (current-time))
+         (now (+ (ash (car now-list) 16) (cadr now-list)))
+         (n 0)
+         comp past datestr date)
+    (or condition
+        (setq condition
+              (read-string (concat prompt
+                                   " files (`<'(before) or `>'(after),"
+                                   " and `N' days ago): "))))
+    (if (not (string-match "^ *\\(\<\\|\>\\) *\\([0-9]+\\) *$" condition))
+        (error "Wrong date condition format")
+      (setq comp (if (string= (match-string 1 condition) "<") '< '>=)
+            past (- now (* 60 60 24 (- (string-to-number
+                                        (match-string 2 condition))
+                                       (if (eq comp '<) 0 1))))
+            past (apply 'encode-time (append '(0 0 0) ;; remove hour/min/sec
+                                             (cdddr (decode-time past))))
+            past (+ (ash (car past) 16) (cadr past)))
+      (save-excursion
+        (trashed-reset-vpos)
+        (while (tabulated-list-get-id)
+          (setq datestr (aref (tabulated-list-get-entry) 2))
+          (string-match "\\([0-9]+\\) \\([0-9]+\\)" datestr)
+          (setq date (+ (ash (string-to-number (match-string 1 datestr)) 16)
+                        (string-to-number (match-string 2 datestr))))
+          (when (funcall comp date past)
+            (tabulated-list-put-tag (char-to-string tag))
+            (setq n (1+ n)))
+          (forward-line)))
+      (message "%d matching files." n))))
 
 (defun trashed-do-action (action)
   "Restore/delete all marked files when ACTION is restore/delete."
@@ -883,25 +959,57 @@ Files marked with other flags (such as ‘D’) are not affected."
                (tabulated-list-put-tag (char-to-string ? ) t))
               (t (forward-line)))))))
 
-(defun trashed-flag-restore-files-regexp ()
-  "Flag all files matching regular expression for restoration."
+(defun trashed-flag-restore-files-regexp (&optional regexp)
+  "Flag all files matching REGEXP for restoration.
+If called interactively or REGEXP is nil, prompt for REGEXP."
   (interactive)
-  (trashed-tag-files-regexp trashed-res-char nil "Restore"))
+  (trashed-tag-files-regexp trashed-res-char regexp "Flag restore"))
 
-(defun trashed-flag-delete-files-regexp ()
-  "Flag all files matching regular expression for deletion."
+(defun trashed-flag-delete-files-regexp (&optional regexp)
+  "Flag all files matching REGEXP for deletion.
+If called interactively or REGEXP is nil, prompt for REGEXP."
   (interactive)
-  (trashed-tag-files-regexp trashed-del-char nil "Delete"))
+  (trashed-tag-files-regexp trashed-del-char regexp "Flag delete"))
 
-(defun trashed-mark-files-regexp ()
-  "Mark all files matching regular expression for use in later commands."
+(defun trashed-mark-files-regexp (&optional regexp)
+  "Mark all files matching REGEXP for use in later commands.
+If called interactively or REGEXP is nil, prompt for REGEXP."
   (interactive)
-  (trashed-tag-files-regexp trashed-marker-char nil "Mark"))
+  (trashed-tag-files-regexp trashed-marker-char regexp "Mark"))
 
-(defun trashed-unmark-files-regexp ()
-  "Unmark all files matching regular expression."
+(defun trashed-unmark-files-regexp (&optional regexp)
+  "Unmark all files matching REGEXP.
+If called interactively or REGEXP is nil, prompt for REGEXP."
   (interactive)
-  (trashed-tag-files-regexp ?  nil "Unmark"))
+  (trashed-tag-files-regexp ?  regexp "Unmark"))
+
+(defun trashed-flag-restore-files-by-date (&optional condition)
+  "Flag all files matching date CONDITION for restoration.
+If called interactively or CONDITION is nil, prompt for date condition.
+See `trashed-tag-files-by-date' for date condition details."
+  (interactive)
+  (trashed-tag-files-by-date trashed-res-char condition "Flag restore"))
+
+(defun trashed-flag-delete-files-by-date (&optional condition)
+  "Flag all files matching date CONDITION for deletion.
+If called interactively or CONDITION is nil, prompt for date condition.
+See `trashed-tag-files-by-date' for date condition details."
+  (interactive)
+  (trashed-tag-files-by-date trashed-del-char condition "Flag delete"))
+
+(defun trashed-mark-files-by-date (&optional condition)
+  "Mark all files matching date CONDITION for use in later commands.
+If called interactively or CONDITION is nil, prompt for date condition.
+See `trashed-tag-files-by-date' for date condition details."
+  (interactive)
+  (trashed-tag-files-by-date trashed-marker-char condition "Mark"))
+
+(defun trashed-unmark-files-by-date (&optional condition)
+  "Unmark all files matching date CONDITION.
+If called interactively or CONDITION is nil, prompt for date condition.
+See `trashed-tag-files-by-date' for date condition details."
+  (interactive)
+  (trashed-tag-files-by-date ?  condition "Unmark"))
 
 (defun trashed-do-restore ()
   "Restore all marked files.
@@ -935,7 +1043,7 @@ If no file is marked, delete this file."
 EVENT is the mouse click event."
   (interactive "e")
   (let ((inhibit-read-only t)
-        sp ep cmd)
+        sp ep key cmd)
     (pop-to-buffer (window-buffer (posn-window (event-end event))))
     (goto-char (posn-point (event-end event)))
     ;; Highlight the file while menu is shown
@@ -943,8 +1051,9 @@ EVENT is the mouse click event."
                           ep (progn (end-of-line) (point))))
     (put-text-property sp ep 'font-lock-face 'highlight)
     (redisplay)
-    (setq cmd (lookup-key trashed-menu
-                          (vector (x-popup-menu event trashed-menu))))
+    (if (not (eq (setq key (apply 'vector (x-popup-menu event trashed-menu)))
+                 []))
+        (setq cmd (lookup-key trashed-menu key)))
     (remove-text-properties sp ep '(font-lock-face))
     (if cmd (call-interactively cmd))))
 

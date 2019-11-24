@@ -36,7 +36,9 @@ Restore file with <kbd>R</kbd> or permanently delete file with <kbd>D</kbd>.  If
 
 ### Advanced marking
 
-Regular expression based marking can be used with <kbd>%</kbd><kbd>m</kbd>, <kbd>%</kbd><kbd>r</kbd> or <kbd>%</kbd><kbd>d</kbd>.
+Regular expression based marking/flagging/unmarking can be used with <kbd>%</kbd><kbd>m</kbd>, <kbd>%</kbd><kbd>r</kbd>, <kbd>%</kbd><kbd>d</kbd> or <kbd>%</kbd><kbd>u</kbd>.
+
+Date condition based marking/flagging/unmarking can be also used with <kbd>$</kbd><kbd>m</kbd>, <kbd>$</kbd><kbd>r</kbd>, <kbd>$</kbd><kbd>d</kbd>, <kbd>$</kbd><kbd>u</kbd>.  Date condition must consist of `<`(before) or `>`(after), and `N` days ago.  For example, `<365` means mark all files deleted before the day 1 year ago, `>30` means mark all files deleted after the day 1 month ago, `>1` means mark all files deleted today.
 
 ### Sorting
 
@@ -98,9 +100,23 @@ Run before Trash Can buffer is read in (created or reverted).
 
 Run after Trash Can buffer is read in (created or reverted).
 
+## Use in Emacs Lisp code
+
+Trashed can be also used from within Emacs Lisp code for trash can maintenance.  For example, below code in `~/.emacs.d/init.el` or `~/.emacs` deletes trashed files which were deleted 1 years ago or before every time Emacs is killed.
+
+``` el
+(defun always-yes-p (prompt) t)
+
+(add-hook 'kill-emacs-hook
+          #'(lambda ()
+              (let ((trashed-action-confirmer 'always-yes-p))
+                (trashed)
+                (trashed-flag-delete-files-by-date "<365")
+                (trashed-do-execute))))
+```
+
 ## TODO
 
   * [x] Menu bar
-  * [ ] Date based marking (mark files 1 month ago or older, etc)
+  * [x] Date based marking (mark files 1 month ago or older, etc)
   * [ ] ...any request/suggestion is appreciated
-  
