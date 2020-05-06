@@ -21,7 +21,7 @@ If you want to install manually, just put `trashed.el` somewhere in your load pa
 <kbd>M-x</kbd><kbd>trashed</kbd><kbd>RET</kbd>, or use your favorite key binding like:
 
 ``` el
-(global-set-key "\C-xt" 'trashed)
+(global-set-key "\C-ct" 'trashed)
 ```
 
 ### Viewing files
