@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 1.9.0
+;; Version: 2.0.0
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -25,7 +25,7 @@
 
 ;; Viewing/editing system trash can -- open, view, restore or
 ;; permanently delete trashed files or directories in trash can with
-;; Dired-like look and feel.  See the website below for details.
+;; Dired-like look and feel.  See the README below for details.
 ;; <https://github.com/shingo256/trashed>
 
 ;;; Code:
@@ -150,16 +150,25 @@ Formatting is done with `format-time-string'.  See the function for details."
 
 ;;; Local variables
 
-(defvar trashed-trash-dir (directory-file-name
-                           (expand-file-name "Trash"
-                                             (or (getenv "XDG_DATA_HOME")
-                                                 "~/.local/share")))
+(defvar trashed-trash-dir
+  (if (eq system-type 'windows-nt)
+      (concat "c:/$Recycle.Bin/"
+              (with-temp-buffer ;; sid
+                (call-process "c:/Windows/System32/whoami" nil t nil
+                              "/user" "/fo" "csv" "/nh")
+                (re-search-backward "\"[^\"]+\",\"\\([^\"]+\\)\"")
+                (buffer-substring (match-beginning 1) (match-end 1))))
+    (directory-file-name (expand-file-name "Trash"
+                                           (or (getenv "XDG_DATA_HOME")
+                                               "~/.local/share"))))
   "Trash directory path.")
 
-(defvar trashed-files-dir (expand-file-name "files" trashed-trash-dir)
+(defvar trashed-files-dir (and (not (eq system-type 'windows-nt))
+                               (expand-file-name "files" trashed-trash-dir))
   "Trash files directory path.")
 
-(defvar trashed-info-dir (expand-file-name "info" trashed-trash-dir)
+(defvar trashed-info-dir (and (not (eq system-type 'windows-nt))
+                              (expand-file-name "info" trashed-trash-dir))
   "Trash info directory path.")
 
 (defvar trashed-buffer nil
@@ -167,6 +176,9 @@ Formatting is done with `format-time-string'.  See the function for details."
 
 (defvar trashed-buffer-name "Trash Can"
   "Buffer name string of Trash Can buffer.")
+
+(defvar trashed-trash-can-size 0
+  "Total size of Trash Can.")
 
 (defvar trashed-mode-map
   (let ((map (make-keymap)))
@@ -393,98 +405,180 @@ set current width to WIDTH."
       (if (> width (car current-width))
           (setcar current-width width)))))
 
+(defun trashed-buffer-substring-as-int (start length)
+  "Return an unsigned integer embedded in current buffer from START for LENGTH.
+Assumes byte order is little-endian."
+  (let ((idx (+ start length))
+        (int 0))
+    (while (> idx start)
+      (setq int (logior (lsh int 8) (char-after idx))
+            idx (1- idx)))
+    int))
+
 (defun trashed-read-trashinfo (trashinfo-file)
   "Return list of original file path and deletion date for TRASHINFO-FILE."
   (with-temp-buffer
-    (insert-file-contents trashinfo-file)
-    (let* ((path (when (re-search-forward (rx bol "Path" (0+ blank) "="
-                                              (0+ blank) (group (1+ nonl)))
-                                          nil t)
-                   (match-string 1)))
-           (deletion-date (progn
-                            (goto-char (point-min))
-                            (when (re-search-forward
-                                   (rx bol "DeletionDate" (0+ blank) "="
-                                       (0+ blank) (group (1+ nonl)))
-                                   nil t)
-                              (parse-iso8601-time-string (match-string 1))))))
-      (cons path deletion-date))))
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally trashinfo-file)
+    (let (sizenum datenum pathstr)
+      (if (eq system-type 'windows-nt)
+          (let ((header (trashed-buffer-substring-as-int 0 8))
+                (datewin (trashed-buffer-substring-as-int 16 8))
+                (pathlen (trashed-buffer-substring-as-int 24 4)))
+            (if (= header 2)
+                (setq sizenum (trashed-buffer-substring-as-int 8 8)
+                      pathstr (replace-regexp-in-string
+                               "\\\\" "/" (decode-coding-string
+                                           (buffer-substring
+                                            (1+ 28) (+ 1 28 (* (1- pathlen) 2)))
+                                           'utf-16-le))
+                      ;; Win to Unix time format conversion
+                      ;;  (100nsecs from 1/1/1601 to secs from 1/1/1970)
+                      datenum (floor (/ (- datewin 116444736000000000)
+                                        10000000))
+                      ;; Conversion to (HIGH . LOW) format
+                      datenum (list (lsh datenum -16)
+                                    (logand datenum (1- (lsh 1 16)))))))
+        (setq pathstr (decode-coding-string
+                       (url-unhex-string
+                        (when (re-search-forward
+                               (rx bol "Path" (0+ blank) "="
+                                   (0+ blank) (group (1+ nonl)))
+                               nil t)
+                          (match-string 1)))
+                       'utf-8)
+              datenum (progn
+                        (goto-char (point-min))
+                        (when (re-search-forward
+                               (rx bol "DeletionDate" (0+ blank) "="
+                                   (0+ blank) (group (1+ nonl)))
+                               nil t)
+                          (parse-iso8601-time-string (match-string 1))))))
+      (list sizenum datenum pathstr))))
 
-(defun trashed-file-info (name attrs)
-  "Return list of name and vector of a trash file for `tabulated-list-entries'.
-NAME and ATTRS are name and attributes of the trash file."
-  (if (not (or (string= name ".") (string= name "..")))
-      (let ((info-file (expand-file-name (concat name ".trashinfo")
-                                         trashed-info-dir)))
-        (if (or (file-readable-p info-file)
+(defun trashed-info-file (trash-file)
+  "Return corresponding trash info filename to TRASH-FILE."
+  (if (eq system-type 'windows-nt)
+      (replace-regexp-in-string "/\\$R\\([^/]+\\)$" "/$I\\1" trash-file)
+    (expand-file-name (concat trash-file ".trashinfo") trashed-info-dir)))
+
+(defun trashed-file-info (file attrs)
+  "Return a list of a trash file's id and descs for `tabulated-list-entries'.
+FILE and ATTRS are file and attributes of the trash file."
+  (if (if (eq system-type 'windows-nt)
+          (string-match "[^:]/\\$R[^/]+$" file)
+        (not (or (string= file ".") (string= file ".."))))
+      (let ((info-file (trashed-info-file file)))
+        (if (or (and (not (file-directory-p info-file))
+                     (file-readable-p info-file))
                 ;; Workaround for info files generated by Emacs bug #37922
-                (file-readable-p (setq info-file (expand-file-name
-                                                  name trashed-info-dir))))
+                (and (not (eq system-type 'windows-nt))
+                     (setq info-file (expand-file-name file trashed-info-dir))
+                     (not (file-directory-p info-file))
+                     (file-readable-p info-file)))
             (let* ((trashinfo (trashed-read-trashinfo info-file))
-                   (path (car trashinfo))
-                   (deletion-date (cdr trashinfo)))
-              (if (and path deletion-date)
-                  (let ((type (substring (nth 8 attrs) 0 1)) ;; file type
-                        (size (number-to-string (nth 7 attrs))) ;; file size
+                   (sizenum (nth 0 trashinfo))
+                   (datenum (nth 1 trashinfo))
+                   (pathstr (nth 2 trashinfo)))
+              (if (and datenum pathstr)
+                  (let ((type (substring (nth 8 attrs) 0 1)) ;; type
+                        (size (number-to-string (or sizenum ;; windows-nt
+                                                    (nth 7 attrs)))) ;; size
                         (date (format "%07d %05d"
-                                      (car deletion-date) (cadr deletion-date)))
-                        (file (propertize (decode-coding-string
-                                           (url-unhex-string path)
-                                           'utf-8)
-                                          'mouse-face 'highlight)))
+                                      (car datenum) (cadr datenum)))
+                        (name (propertize pathstr 'mouse-face 'highlight)))
+                    ;; Add up trash can size
+                    (setq trashed-trash-can-size (+ trashed-trash-can-size
+                                                    (string-to-number size)))
                     ;; Lengthen column width if needed
                     (trashed-update-col-width
                      1 (string-width (trashed-format-size-string size)))
                     (trashed-update-col-width
                      2 (string-width (trashed-format-date-string date)))
-                    (trashed-update-col-width 3 (string-width file))
+                    (trashed-update-col-width
+                     3 (string-width name))
                     ;; File info
-                    (list name (vector type size date file)))
-                (message "Skipping %s: wrong info file format." name)
+                    (list file (vector type size date name)))
+                (message "Skipped %s: cannot recognize info file format." file)
                 nil))
-          (message "Skipping %s: cannot find or read info file." name)
+          (message "Skipped %s: cannot find or read info file." file)
           nil))))
 
 (defun trashed-read-files ()
   "Read trash information from trash files and info directories.
 The information is stored in `tabulated-list-entries', where ID is trash file
 name in files directory, and DESC is a vector of file type(-/D), size,
-deletion date and original file name."
-  ;; Initialize column width
+deletion date and original filename."
+  ;; Initialization
+  (setq trashed-trash-can-size 0)
   (trashed-update-col-width 1 nil)
   (trashed-update-col-width 2 nil)
   (trashed-update-col-width 3 nil)
   ;; Read files
-  (let* ((files (directory-files-and-attributes trashed-files-dir nil nil t))
-         (entries (cl-loop for (name . attrs) in files
-                           for entry = (trashed-file-info name attrs)
-                           when entry collect entry)))
-    (setq tabulated-list-entries entries)))
+  (let* (files)
+    (if (eq system-type 'windows-nt)
+        ;; Read trash cans in all drives
+        (let ((drive-letter ?a))
+          (while (<= drive-letter ?z)
+            (aset trashed-trash-dir 0 drive-letter)
+            (setq files (append files
+                                ;; Make each trash filename full path
+                                (mapcar (lambda (file-attrs)
+                                          (setcar file-attrs
+                                                  (expand-file-name
+                                                   (car file-attrs)
+                                                   trashed-trash-dir))
+                                          file-attrs)
+                                 (ignore-errors (directory-files-and-attributes
+                                                 trashed-trash-dir nil nil t))))
+                  drive-letter (1+ drive-letter))))
+      (setq files (ignore-errors (directory-files-and-attributes
+                                  trashed-files-dir nil nil t))))
+    (setq tabulated-list-entries
+          (cl-loop for (file . attrs) in files
+                   for entry = (trashed-file-info file attrs)
+                   when entry collect entry))))
 
-(defun trashed-get-trash-size ()
-  "Issue du shell command to get total Trash Can size."
-  (let* ((buffer (generate-new-buffer "*Async Shell Command*"))
-         (process (start-process "trash" buffer shell-file-name
-                                 shell-command-switch
-                                 (concat "du -s -h " trashed-trash-dir))))
-    (if (processp process)
-        (set-process-sentinel process 'trashed-get-trash-size-sentinel)
-      (kill-buffer buffer))))
+(defun trashed-display-trash-can-size ()
+  "Display Trash Can size in buffer name."
+  (rename-buffer (format "%s (%sB)"
+                         trashed-buffer-name
+                         (file-size-human-readable trashed-trash-can-size))))
 
 (defun trashed-get-trash-size-sentinel (process event)
   "Get total Trash Can size and display it in buffer name when du completed.
 PROCESS is the process which ran du command started by `trashed-get-trash-size'.
 EVENT is ignored."
   (let* ((pbuf (process-buffer process))
-         (size (with-current-buffer pbuf
-                 (goto-char (point-min))
-                 (if (and (string-match "finished" event)
-                          (re-search-forward "[^	]+" nil t))
-                     (match-string 0)))))
+         (sizestr (with-current-buffer pbuf
+                    (goto-char (point-min))
+                    (if (and (string-match "finished" event)
+                             (re-search-forward "[^	]+" nil t))
+                        (match-string 0)))))
     (kill-buffer pbuf)
-    (if (and size (buffer-live-p trashed-buffer))
-        (with-current-buffer trashed-buffer
-          (rename-buffer (format "%s (%sB)" trashed-buffer-name size))))))
+    (if (and sizestr (buffer-live-p trashed-buffer))
+        (progn
+          (setq trashed-trash-can-size (string-to-number sizestr))
+          (with-current-buffer trashed-buffer
+            (trashed-display-trash-can-size))))))
+
+(defun trashed-get-trash-size ()
+  "Issue du shell command to get total Trash Can size."
+  (let* ((buffer (generate-new-buffer "*Async Shell Command*"))
+         (process (start-process "trash" buffer shell-file-name
+                                 shell-command-switch
+                                 (concat "du -s -b " trashed-files-dir))))
+    (if (processp process)
+        (set-process-sentinel process 'trashed-get-trash-size-sentinel)
+      (kill-buffer buffer))))
+
+(defun trashed-update-trash-can-size ()
+  "Update Trash Can size in buffer name."
+  (if (eq system-type 'windows-nt)
+      (trashed-display-trash-can-size)
+    ;; Get actual size with du shell command because trash directory size
+    ;; is not valid
+    (trashed-get-trash-size)))
 
 (defun trashed-reset-vpos ()
   "Set vertical cursor position to `trashed-default-vpos'."
@@ -513,8 +607,8 @@ RESET-COL, if t, means reset current column position to the default as well."
   "Read, sort and insert trash information to current buffer."
   (run-hooks 'trashed-before-readin-hook)
   (message "Reading trash files...")
-  (trashed-get-trash-size)
   (trashed-read-files)
+  (trashed-update-trash-can-size)
   (message "Reading trash files...done")
   (run-hooks 'trashed-after-readin-hook)
   (setq tabulated-list-use-header-line trashed-use-header-line
@@ -551,16 +645,15 @@ RESET-COL, if t, means reset current column position to the default as well."
 (defun trashed-browse-url-of-file-internal (filename)
   "Ask a browser to display FILENAME using `browse-url-of-file'.
 If FILENAME's original file extension was modified due to the name collision
-in Trash directory, restore it first by renaming the trash file name
+in Trash directory, restore it first by renaming the trash filename
 so the browser can display it properly."
   (let ((name (aref (tabulated-list-get-entry) 3)))
     (if (or (file-directory-p filename)
             (string= (file-name-extension filename) (file-name-extension name)))
         (browse-url-of-file filename)
       ;; Rename trash file to recover the original filename extension
-      (let* ((info-file (expand-file-name
-                         (concat (file-name-nondirectory filename) ".trashinfo")
-                         trashed-info-dir))
+      ;; This is only possible when (not (eq system-type 'windows-nt))
+      (let* ((info-file (trashed-info-file (file-name-nondirectory filename)))
              delete-by-moving-to-trash newname)
         ;; Workaround for info files generated by Emacs bug #37922
         (if (not (file-exists-p info-file))
@@ -573,12 +666,9 @@ so the browser can display it properly."
                                                   trashed-files-dir)
                                 nil (concat "." (file-name-extension name))))
                  (condition-case nil
-                     (progn (rename-file info-file
-                                         (expand-file-name
-                                          (concat (file-name-nondirectory
-                                                   newname)
-                                                  ".trashinfo")
-                                          trashed-info-dir))) ;; nil -> exit
+                     (rename-file info-file (trashed-info-file
+                                             (file-name-nondirectory
+                                              newname))) ;; nil -> exit
                    (file-already-exists t))) ;; t -> retry
           (delete-file newname))
         (rename-file filename newname t)
@@ -718,9 +808,7 @@ When MARK-ACTION is:
   nil     -- restore/delete files with flag R/D.
   restore -- restore files with mark *.
   delete  -- delete files with mark *."
-  (let* (trash-file-name m entry
-         (isfx ".trashinfo")
-         (isfxlen (length isfx)))
+  (let* (trash-file-name m entry)
     (save-excursion
       (trashed-reset-vpos)
       (while (setq trash-file-name (tabulated-list-get-id))
@@ -744,19 +832,20 @@ When MARK-ACTION is:
               (t)))
             (progn
               ;; Delete info file
-              (if (file-exists-p (expand-file-name (concat trash-file-name isfx)
-                                                   trashed-info-dir))
-                  (delete-file (expand-file-name (concat trash-file-name isfx)
-                                                 trashed-info-dir))
+              (if (file-exists-p (trashed-info-file trash-file-name))
+                  (delete-file (trashed-info-file trash-file-name))
                 ;; Workaround for info files generated by Emacs bug #37922
-                (if (and (> (length trash-file-name) isfxlen)
-                         (string= (substring trash-file-name (- isfxlen)) isfx)
-                         (not (file-exists-p (expand-file-name
-                                               (substring trash-file-name
-                                                          0 (- isfxlen))
-                                               trashed-files-dir))))
-                    (delete-file (expand-file-name trash-file-name
-                                                   trashed-info-dir))))
+                (let* ((isfx ".trashinfo")
+                       (isfxlen (length isfx)))
+                  (if (and (> (length trash-file-name) isfxlen)
+                           (string= (substring trash-file-name (- isfxlen))
+                                    isfx)
+                           (not (file-exists-p (expand-file-name
+                                                (substring trash-file-name
+                                                           0 (- isfxlen))
+                                                trashed-files-dir))))
+                      (delete-file (expand-file-name trash-file-name
+                                                     trashed-info-dir)))))
               ;; Delete from `tabulated-list-entries'
               (if (string= (caar tabulated-list-entries) trash-file-name)
                   (setq tabulated-list-entries (cdr tabulated-list-entries))
@@ -766,9 +855,13 @@ When MARK-ACTION is:
                                    (progn (setcdr tail (cdr tail-cdr)) nil)
                                  tail-cdr)))))
               ;; Delete from the list displayed
-              (tabulated-list-delete-entry))
+              (tabulated-list-delete-entry)
+              ;; Subtract from trash can size
+              (setq trashed-trash-can-size (- trashed-trash-can-size
+                                              (string-to-number
+                                               (aref entry 1)))))
           (forward-line)))
-      (trashed-get-trash-size))))
+      (trashed-update-trash-can-size))))
 
 ;;; User commands
 
