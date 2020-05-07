@@ -2,7 +2,7 @@
 
 ## Viewing/editing system trash can in Emacs
 
-Open, view, browse, restore or permanently delete trashed files or directories in trash can with Dired-like look and feel.  In Emacs, You can trash files by deleting them with `(setq delete-by-moving-to-trash t)`.  This package provides a simple but convenient user interface to manage those trashed files.  Supported trash can formats are currently Windows 10 Recycle Bin (when `(eq system-type 'windows-nt)`) and [freedesktop.org Trash Can](https://freedesktop.org/wiki/Specifications/trash-spec/) (otherwise).
+Open, view, browse, restore or permanently delete trashed files or directories in trash can with Dired-like look and feel.  In Emacs, You can trash files by deleting them with `(setq delete-by-moving-to-trash t)`.  This package provides a simple but convenient user interface to manage those trashed files.  Supported trash cans are currently MS Windows Recycle Bin and [freedesktop.org Trash Can](https://freedesktop.org/wiki/Specifications/trash-spec/).
 
 ## Installation
 
@@ -24,7 +24,9 @@ If you want to install manually, just put `trashed.el` somewhere in your load pa
 (global-set-key "\C-ct" 'trashed)
 ```
 
-### Viewing files
+If `(eq system-type 'windows-nt)` such as mingw Emacs, it accesses Windows Recycle Bin under `$Recycle.Bin` folder in all drives.  Otherwise, it accesses freedesktop trash can under `~/.local/share/Trash` or somewhere else `XDG_DATA_HOME` specifies.  Windows XP or older is not supported.
+
+### View files
 
 Open, view or browse file with <kbd>f</kbd>, <kbd>v</kbd> or <kbd>W</kbd>.  Open or display file in another window with <kbd>o</kbd> or <kbd>Ctrl-o</kbd>.
 
@@ -117,5 +119,5 @@ Trashed can be also used from within Emacs Lisp code for trash can maintenance. 
 
   * [x] Menu bar
   * [x] Date based marking (mark files 1 month ago or older, etc)
-  * [x] Support Windows 10 Recycle Bin
+  * [x] Support MS Windows Recycle Bin
   * [ ] ...any request/suggestion is appreciated

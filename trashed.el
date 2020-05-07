@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 2.0.0
+;; Version: 2.1.0
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -25,7 +25,7 @@
 
 ;; Viewing/editing system trash can -- open, view, restore or
 ;; permanently delete trashed files or directories in trash can with
-;; Dired-like look and feel.  See the README below for details.
+;; Dired-like look and feel.  See below for details.
 ;; <https://github.com/shingo256/trashed>
 
 ;;; Code:
@@ -405,7 +405,7 @@ set current width to WIDTH."
       (if (> width (car current-width))
           (setcar current-width width)))))
 
-(defun trashed-buffer-substring-as-int (start length)
+(defun trashed-buffer-get-integer (start length)
   "Return an unsigned integer embedded in current buffer from START for LENGTH.
 Assumes byte order is little-endian."
   (let ((idx (+ start length))
@@ -416,45 +416,62 @@ Assumes byte order is little-endian."
     int))
 
 (defun trashed-read-trashinfo (trashinfo-file)
-  "Return list of original file path and deletion date for TRASHINFO-FILE."
-  (with-temp-buffer
-    (set-buffer-multibyte nil)
-    (insert-file-contents-literally trashinfo-file)
-    (let (sizenum datenum pathstr)
-      (if (eq system-type 'windows-nt)
-          (let ((header (trashed-buffer-substring-as-int 0 8))
-                (datewin (trashed-buffer-substring-as-int 16 8))
-                (pathlen (trashed-buffer-substring-as-int 24 4)))
-            (if (= header 2)
-                (setq sizenum (trashed-buffer-substring-as-int 8 8)
-                      pathstr (replace-regexp-in-string
-                               "\\\\" "/" (decode-coding-string
-                                           (buffer-substring
-                                            (1+ 28) (+ 1 28 (* (1- pathlen) 2)))
-                                           'utf-16-le))
-                      ;; Win to Unix time format conversion
-                      ;;  (100nsecs from 1/1/1601 to secs from 1/1/1970)
-                      datenum (floor (/ (- datewin 116444736000000000)
-                                        10000000))
-                      ;; Conversion to (HIGH . LOW) format
-                      datenum (list (lsh datenum -16)
-                                    (logand datenum (1- (lsh 1 16)))))))
-        (setq pathstr (decode-coding-string
-                       (url-unhex-string
-                        (when (re-search-forward
-                               (rx bol "Path" (0+ blank) "="
-                                   (0+ blank) (group (1+ nonl)))
-                               nil t)
-                          (match-string 1)))
-                       'utf-8)
-              datenum (progn
-                        (goto-char (point-min))
-                        (when (re-search-forward
-                               (rx bol "DeletionDate" (0+ blank) "="
-                                   (0+ blank) (group (1+ nonl)))
-                               nil t)
-                          (parse-iso8601-time-string (match-string 1))))))
-      (list sizenum datenum pathstr))))
+  "Return a list of original file information from TRASHINFO-FILE.
+The information is original file's size, deletion date and path.
+Currently, MS Windows Vista/7/8/8.1/10 Recycle Bin and freedesktop trash can
+are supported."
+  (ignore-errors
+    (with-temp-buffer
+      (set-buffer-multibyte nil)
+      (insert-file-contents-literally trashinfo-file)
+      (let (sizenum datenum pathstr)
+        (if (eq system-type 'windows-nt) ;; Windows Recycle Bin
+            (let ((header (trashed-buffer-get-integer 0 8))
+                  (datewin (trashed-buffer-get-integer 16 8))
+                  pathpos pathlen)
+              (cond ((= header 1) ;; Windows Vista/7/8/8.1
+                     (setq pathpos 24
+                           pathlen (let ((i pathpos) found) ;; search NUL char
+                                     (while (and (< i (point-max)) (not found))
+                                       (setq found (and
+                                                    (= (char-after i) 0)
+                                                    (= (char-after (1+ i)) 0))
+                                             i (+ i 2)))
+                                     (/ (- i pathpos 2) 2))))
+                    ((= header 2) ;; Windows 10
+                     (setq pathpos 28
+                           pathlen (1- (trashed-buffer-get-integer 24 4)))))
+              (setq sizenum (trashed-buffer-get-integer 8 8)
+                    ;; Win to Unix time format conversion
+                    ;;  (100nsecs from 1/1/1601 to secs from 1/1/1970)
+                    datenum (floor (/ (- datewin 116444736000000000)
+                                      10000000))
+                    ;; Conversion to (HIGH . LOW) format
+                    datenum (list (lsh datenum -16)
+                                  (logand datenum (1- (lsh 1 16))))
+                    pathstr (replace-regexp-in-string
+                             "\\\\" "/" (decode-coding-string
+                                         (buffer-substring (+ 1 pathpos)
+                                                           (+ 1 pathpos
+                                                              (* pathlen 2)))
+                                         'utf-16-le))))
+          ;; freedesktop trash can
+          (setq pathstr (decode-coding-string
+                         (url-unhex-string
+                          (when (re-search-forward
+                                 (rx bol "Path" (0+ blank) "="
+                                     (0+ blank) (group (1+ nonl)))
+                                 nil t)
+                            (match-string 1)))
+                         'utf-8)
+                datenum (progn
+                          (goto-char (point-min))
+                          (when (re-search-forward
+                                 (rx bol "DeletionDate" (0+ blank) "="
+                                     (0+ blank) (group (1+ nonl)))
+                                 nil t)
+                            (parse-iso8601-time-string (match-string 1))))))
+        (list sizenum datenum pathstr)))))
 
 (defun trashed-info-file (trash-file)
   "Return corresponding trash info filename to TRASH-FILE."
