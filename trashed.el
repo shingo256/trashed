@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 2.1.0
+;; Version: 2.1.1
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -707,19 +707,16 @@ so the browser can display it properly."
 Return nil if it successfully restored, t if an error occurred
 or it was cancelled by user."
   (let (delete-by-moving-to-trash)
+    (make-directory (file-name-directory newname) t)
     (condition-case err
         (rename-file file newname)
-      (file-already-exists
-       (if (apply trashed-action-confirmer
-                  (list (format "File %s already exists; restore it anyway? "
-                                newname)))
-           (rename-file file newname t)
-         t))
-      (file-error
-       (if (string= (cadr err) "File is a directory")
+      ((file-already-exists file-error)
+       (if (or (eq (car err) 'file-already-exists)
+               (and (eq (car err) 'file-error)
+                    (string= (cadr err) "File is a directory")))
            (if (apply trashed-action-confirmer
                       (list (format
-                             "Directory %s already exists; restore it anyway? "
+                             "%s already exists; overwrite it? "
                              newname)))
                (rename-file file newname t)
              t)

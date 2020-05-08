@@ -24,7 +24,7 @@ If you want to install manually, just put `trashed.el` somewhere in your load pa
 (global-set-key "\C-ct" 'trashed)
 ```
 
-If `(eq system-type 'windows-nt)` such as mingw Emacs, it accesses Windows Recycle Bin under `$Recycle.Bin` folder in all drives.  Otherwise, it accesses freedesktop trash can under `~/.local/share/Trash` or somewhere else `XDG_DATA_HOME` specifies.  Windows XP or older is not supported.
+If `(eq system-type 'windows-nt)` such as mingw Emacs, it accesses Windows Recycle Bin under `$Recycle.Bin` folder in all drives.  Otherwise such as Linux, it accesses freedesktop trash can under `~/.local/share/Trash` or somewhere else `XDG_DATA_HOME` specifies.  Windows XP or older is not supported.
 
 ### View files
 
