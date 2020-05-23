@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 2.1.1
+;; Version: 2.1.2
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -30,6 +30,7 @@
 
 ;;; Code:
 
+(require 'dired)
 (require 'parse-time)
 
 ;;; Customization variables
@@ -107,7 +108,7 @@ Formatting is done with `format-time-string'.  See the function for details."
   :group 'faces)
 
 (defface trashed-mark
-  '((t (:inherit font-lock-constant-face)))
+  '((t (:inherit dired-mark)))
   "Face used for trash marks."
   :group 'trashed-faces)
 (defvar trashed-mark-face 'trashed-mark
@@ -121,28 +122,28 @@ Formatting is done with `format-time-string'.  See the function for details."
   "Face name used for files flagged for restoration.")
 
 (defface trashed-deleted
-  '((t (:inherit error)))
+  '((t (:inherit dired-flagged)))
   "Face used for files flagged for deletion."
   :group 'trashed-faces)
 (defvar trashed-deleted-face 'trashed-deleted
   "Face name used for files flagged for deletion.")
 
 (defface trashed-marked
-  '((t (:inherit warning)))
+  '((t (:inherit dired-marked)))
   "Face used for marked files."
   :group 'trashed-faces)
 (defvar trashed-marked-face 'trashed-marked
   "Face name used for marked files.")
 
 (defface trashed-directory
-  '((t (:inherit font-lock-function-name-face)))
+  '((t (:inherit dired-directory)))
   "Face used for directories."
   :group 'trashed-faces)
 (defvar trashed-directory-face 'trashed-directory
   "Face name used for directories.")
 
 (defface trashed-symlink
-  '((t (:inherit font-lock-keyword-face)))
+  '((t (:inherit dired-symlink)))
   "Face used for directories."
   :group 'trashed-faces)
 (defvar trashed-symlink-face 'trashed-symlink
@@ -336,19 +337,17 @@ This is automatically set in `trashed-readin'.")
 
 (defun trashed-format-size-string (sizestr)
   "Format file string SIZESTR based on `trashed-size-format'."
-  (cond ((eq trashed-size-format 'plain)
-         sizestr)
-        ((eq trashed-size-format 'human-readable)
-         (file-size-human-readable (string-to-number sizestr)))
-        ((eq trashed-size-format 'with-comma)
-         (let ((size (string-to-number sizestr)) ret)
-           (while (> size 0)
-             (setq ret (concat (format (if (< size 1000) "%d" "%03d")
-                                       (% size 1000))
-                               (if ret "," "") ret)
-                   size (/ size 1000)))
-           (or ret "0")))
-        (t sizestr)))
+  (pcase trashed-size-format
+    ('plain sizestr)
+    ('human-readable (file-size-human-readable (string-to-number sizestr)))
+    ('with-comma (let ((size (string-to-number sizestr)) ret)
+                   (while (> size 0)
+                     (setq ret (concat (format (if (< size 1000) "%d" "%03d")
+                                               (% size 1000))
+                                       (if ret "," "") ret)
+                           size (/ size 1000)))
+                   (or ret "0")))
+    (_ sizestr)))
 
 (defun trashed-format-date-string (datestr)
   "Format date string DATESTR based on `trashed-date-format'."
@@ -429,18 +428,19 @@ are supported."
             (let ((header (trashed-buffer-get-integer 0 8))
                   (datewin (trashed-buffer-get-integer 16 8))
                   pathpos pathlen)
-              (cond ((= header 1) ;; Windows Vista/7/8/8.1
-                     (setq pathpos 24
-                           pathlen (let ((i pathpos) found) ;; search NUL char
-                                     (while (and (< i (point-max)) (not found))
-                                       (setq found (and
-                                                    (= (char-after i) 0)
-                                                    (= (char-after (1+ i)) 0))
-                                             i (+ i 2)))
-                                     (/ (- i pathpos 2) 2))))
-                    ((= header 2) ;; Windows 10
-                     (setq pathpos 28
-                           pathlen (1- (trashed-buffer-get-integer 24 4)))))
+              (pcase header
+                (1 ;; Windows Vista/7/8/8.1
+                 (setq pathpos 24
+                       pathlen (let ((i pathpos) found) ;; search NUL char
+                                 (while (and (< i (point-max)) (not found))
+                                   (setq found (and
+                                                (= (char-after i) 0)
+                                                (= (char-after (1+ i)) 0))
+                                         i (+ i 2)))
+                                 (/ (- i pathpos 2) 2))))
+                (2 ;; Windows 10
+                 (setq pathpos 28
+                       pathlen (1- (trashed-buffer-get-integer 24 4)))))
               (setq sizenum (trashed-buffer-get-integer 8 8)
                     ;; Win to Unix time format conversion
                     ;;  (100nsecs from 1/1/1601 to secs from 1/1/1970)
