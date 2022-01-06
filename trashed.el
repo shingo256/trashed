@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 2.1.2
+;; Version: 2.1.3
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -606,13 +606,7 @@ EVENT is ignored."
   "Set horizontal cursor position to column COL."
   (beginning-of-line)
   (if (tabulated-list-get-id)
-      ;; Can't use (forward-char n) as there could be 2 width char
-      (let ((hpos (aref trashed-column-hpos col)) cur-width)
-        (while (> hpos 0)
-          (setq cur-width (string-width (char-to-string (char-after)))
-                hpos (- hpos cur-width))
-          (unless (and (< hpos 1) (> cur-width 1)) ;; the last char width is >1
-            (forward-char))))))
+      (move-to-column (aref trashed-column-hpos col))))
 
 (defun trashed-reset-hpos (&optional reset-col)
   "Set horizontal cursor position to the default column.
