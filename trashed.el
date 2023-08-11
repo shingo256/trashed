@@ -3,7 +3,7 @@
 ;; Copyright (C) 2019 Shingo Tanaka
 
 ;; Author: Shingo Tanaka <shingo.fg8@gmail.com>
-;; Version: 2.1.3
+;; Version: 2.1.4
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: files, convenience, unix
 ;; URL: https://github.com/shingo256/trashed
@@ -532,22 +532,21 @@ deletion date and original filename."
   (trashed-update-col-width 2 nil)
   (trashed-update-col-width 3 nil)
   ;; Read files
-  (let* (files)
+  (let (files)
     (if (eq system-type 'windows-nt)
         ;; Read trash cans in all drives
         (let ((drive-letter ?a))
           (while (<= drive-letter ?z)
             (aset trashed-trash-dir 0 drive-letter)
-            (setq files (append files
-                                ;; Make each trash filename full path
-                                (mapcar (lambda (file-attrs)
-                                          (setcar file-attrs
-                                                  (expand-file-name
-                                                   (car file-attrs)
-                                                   trashed-trash-dir))
-                                          file-attrs)
-                                 (ignore-errors (directory-files-and-attributes
-                                                 trashed-trash-dir nil nil t))))
+            (setq files
+                  (append files
+                          (or (ignore-errors (directory-files-and-attributes
+                                              trashed-trash-dir t nil t))
+                              ;; Retry it w/o sid
+                              (let ((trashed-trash-dir (file-name-directory
+                                                        trashed-trash-dir)))
+                                (ignore-errors (directory-files-and-attributes
+                                                trashed-trash-dir t nil t)))))
                   drive-letter (1+ drive-letter))))
       (setq files (ignore-errors (directory-files-and-attributes
                                   trashed-files-dir nil nil t))))
