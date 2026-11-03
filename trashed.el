@@ -657,9 +657,9 @@ RESET-COL, if t, means reset current column position to the default as well."
   (if (eq system-type 'windows-nt)
       (aset trashed-trash-dir 0 (aref file 0))) ;; adjust drive letter
   (cl-assert (file-in-directory-p file trashed-trash-dir))
-  (delete-file file)
-  (when trashed-verbose
-    (message "Deleting %s...done" file)))
+  (prog1 (delete-file file)
+    (when trashed-verbose
+      (message "Deleting %s...done" file))))
 
 (defun trashed-browse-url-of-file-internal (filename)
   "Ask a browser to display FILENAME using `browse-url-of-file'.
